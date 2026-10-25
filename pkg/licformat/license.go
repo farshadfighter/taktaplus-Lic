@@ -41,7 +41,8 @@ type Online struct {
 }
 
 // DeviceItem is a per-serial subscription. It enables monitoring, signature
-// updates, backup/restore and reporting for that one device.
+// updates, backup/restore, reporting and central management for that one
+// device.
 type DeviceItem struct {
 	Serial   string   `json:"serial"`
 	Platform Platform `json:"platform"`
