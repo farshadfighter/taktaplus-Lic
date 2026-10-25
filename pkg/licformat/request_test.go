@@ -15,7 +15,7 @@ func TestRequestRoundTrip(t *testing.T) {
 		LicenseKey:         "TPK-AAAA-BBBB-CCCC-DDDD",
 		InstallationID:     InstallationID(pub),
 		InstallationPubKey: pub,
-		Fingerprint:        Fingerprint{MachineID: "m1", DiskID: "d1", MAC: "a1"},
+		Fingerprint:        Fingerprint{MachineID: "m1", ProductUUID: "d1", MAC: "a1"},
 		ProductVersion:     "0.1.0",
 		CreatedAt:          time.Now().UTC(),
 		Nonce:              NewNonce(),
@@ -59,15 +59,15 @@ func TestInstallationID(t *testing.T) {
 }
 
 func TestFingerprintMatches(t *testing.T) {
-	base := Fingerprint{MachineID: "m", DiskID: "d", MAC: "a"}
+	base := Fingerprint{MachineID: "m", ProductUUID: "d", MAC: "a"}
 	tests := []struct {
 		name  string
 		other Fingerprint
 		want  bool
 	}{
 		{"identical", base, true},
-		{"one changed", Fingerprint{MachineID: "m", DiskID: "d", MAC: "x"}, true},
-		{"two changed", Fingerprint{MachineID: "m", DiskID: "y", MAC: "x"}, false},
+		{"one changed", Fingerprint{MachineID: "m", ProductUUID: "d", MAC: "x"}, true},
+		{"two changed", Fingerprint{MachineID: "m", ProductUUID: "y", MAC: "x"}, false},
 		{"one missing one changed", Fingerprint{MachineID: "m", MAC: "x"}, true},
 		{"only one compared and different", Fingerprint{MAC: "x"}, false},
 		{"nothing comparable", Fingerprint{}, false},

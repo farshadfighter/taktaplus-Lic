@@ -23,16 +23,16 @@ func InstallationID(pub ed25519.PublicKey) string {
 // Fingerprint holds hashed hardware identifiers of the machine running an
 // installation. Values are opaque hex digests; empty means "not available".
 type Fingerprint struct {
-	MachineID string `json:"machine_id,omitempty"`
-	DiskID    string `json:"disk_id,omitempty"`
-	MAC       string `json:"mac,omitempty"`
+	MachineID   string `json:"machine_id,omitempty"`
+	ProductUUID string `json:"product_uuid,omitempty"`
+	MAC         string `json:"mac,omitempty"`
 }
 
 // Matches reports whether two fingerprints describe the same machine. At most
 // one available component may differ, so a single hardware change (e.g. a new
 // NIC) does not invalidate the installation.
 func (f Fingerprint) Matches(other Fingerprint) bool {
-	pairs := [][2]string{{f.MachineID, other.MachineID}, {f.DiskID, other.DiskID}, {f.MAC, other.MAC}}
+	pairs := [][2]string{{f.MachineID, other.MachineID}, {f.ProductUUID, other.ProductUUID}, {f.MAC, other.MAC}}
 	compared, equal := 0, 0
 	for _, p := range pairs {
 		if p[0] == "" || p[1] == "" {
