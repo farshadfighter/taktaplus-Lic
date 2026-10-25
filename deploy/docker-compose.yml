@@ -1,0 +1,34 @@
+# Local development / single-host deployment of the license server.
+#   make db-up                     # PostgreSQL only, for `make run`
+#   docker compose -f deploy/docker-compose.yml up -d --build   # everything
+name: taktaplus-lic
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: taktaplus_lic
+      POSTGRES_PASSWORD: ${TPLIC_DB_PASSWORD:-taktaplus_lic}
+      POSTGRES_DB: taktaplus_lic
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U taktaplus_lic"]
+      interval: 5s
+      retries: 10
+
+  licserver:
+    build: ..
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      TPLIC_LISTEN: ":8080"
+      TPLIC_DATABASE_URL: postgres://taktaplus_lic:${TPLIC_DB_PASSWORD:-taktaplus_lic}@postgres:5432/taktaplus_lic?sslmode=disable
+    ports:
+      - "8080:8080"
+
+volumes:
+  pgdata:
