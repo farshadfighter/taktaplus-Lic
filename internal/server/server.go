@@ -95,6 +95,19 @@ func New(d Deps) http.Handler {
 			r.With(lw).Post("/licenses/{id}/file", s.downloadLicense)
 			r.With(requirePerm(auth.PermLicensesRevoke)).Post("/licenses/{id}/revoke", s.revokeLicense)
 			r.With(requirePerm(auth.PermInstallationsWrite)).Post("/licenses/{id}/release", s.releaseInstallation)
+
+			off := requirePerm(auth.PermActivationOffline)
+			r.With(off).Post("/activations/inspect", s.handleInspect)
+			r.With(off).Post("/activations/offline", s.handleOfflineActivate)
+			r.With(requirePerm(auth.PermInstallationsRead)).Get("/installations", s.listInstallations)
+		})
+
+		// Installation endpoints: no cookies; every request is signed by the
+		// installation key, so CSRF does not apply.
+		r.Group(func(r chi.Router) {
+			r.Use(newRateLimiter(30, time.Minute).middleware)
+			r.Post("/activate", s.handleActivate)
+			r.Post("/heartbeat", s.handleHeartbeat)
 		})
 
 		r.NotFound(func(w http.ResponseWriter, _ *http.Request) {

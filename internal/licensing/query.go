@@ -223,3 +223,39 @@ func (s *Service) installation(ctx context.Context, id string) (Installation, er
 		&in.ID, &in.ProductVersion, &in.Status, &in.CreatedAt, &in.LastHeartbeatAt, &in.LastSeenIP, &in.LastUsage, &in.Warnings)
 	return in, err
 }
+
+// InstallationRow is an installation in the admin list.
+type InstallationRow struct {
+	Installation
+	LicenseID    *int64  `json:"license_id"`
+	LicenseCode  *string `json:"license_code"`
+	CustomerName *string `json:"customer_name"`
+	Mode         *string `json:"mode"`
+}
+
+// ListInstallations returns installations, most recently seen first.
+func (s *Service) ListInstallations(ctx context.Context, query string) ([]InstallationRow, error) {
+	q := strings.TrimSpace(query)
+	rows, err := s.db.Query(ctx, `
+		SELECT i.id, i.product_version, i.status, i.created_at, i.last_heartbeat_at, i.last_seen_ip, i.last_usage, i.warnings,
+		       l.id, l.code, c.name, l.mode
+		FROM installations i
+		LEFT JOIN licenses l ON l.installation_id = i.id
+		LEFT JOIN organizations c ON c.id = l.customer_id
+		WHERE $1 = '' OR i.id ILIKE '%' || $1 || '%' OR c.name ILIKE '%' || $1 || '%' OR l.code ILIKE '%' || $1 || '%'
+		ORDER BY i.last_heartbeat_at DESC NULLS LAST`, q)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []InstallationRow{}
+	for rows.Next() {
+		var r InstallationRow
+		if err := rows.Scan(&r.ID, &r.ProductVersion, &r.Status, &r.CreatedAt, &r.LastHeartbeatAt, &r.LastSeenIP, &r.LastUsage, &r.Warnings,
+			&r.LicenseID, &r.LicenseCode, &r.CustomerName, &r.Mode); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}

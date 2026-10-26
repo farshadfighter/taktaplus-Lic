@@ -19,8 +19,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/farshadfighter/taktaplus-lic/internal/auth"
+	"github.com/farshadfighter/taktaplus-lic/internal/licensing"
 	"github.com/farshadfighter/taktaplus-lic/internal/orgs"
 	"github.com/farshadfighter/taktaplus-lic/internal/secretbox"
+	"github.com/farshadfighter/taktaplus-lic/internal/signer"
 	"github.com/farshadfighter/taktaplus-lic/internal/testdb"
 )
 
@@ -39,8 +41,10 @@ func newHarness(t *testing.T) *harness {
 	_, _ = rand.Read(key)
 	box, _ := secretbox.New(key)
 	svc := auth.NewService(db, box)
+	sk, _ := signer.Generate("lic-test")
+	lic := licensing.NewService(db, box, licensing.NewIssuer(&sk), "")
 	ui := fstest.MapFS{"index.html": {Data: []byte("<html>app</html>")}}
-	ts := httptest.NewServer(New(Deps{Log: slog.New(slog.NewTextHandler(io.Discard, nil)), DB: db, Auth: svc, UI: ui}))
+	ts := httptest.NewServer(New(Deps{Log: slog.New(slog.NewTextHandler(io.Discard, nil)), DB: db, Auth: svc, Licensing: lic, UI: ui}))
 	t.Cleanup(ts.Close)
 	jar, _ := cookiejar.New(nil)
 	return &harness{t: t, db: db, auth: svc, ts: ts, client: &http.Client{Jar: jar}}
@@ -174,5 +178,27 @@ func TestLockout(t *testing.T) {
 	code, body := h.do("POST", "/api/v1/auth/login", map[string]string{"email": "owner@example.com", "password": "correct horse battery"}, true)
 	if code != http.StatusUnauthorized || !strings.Contains(body["error"].(string), "locked") {
 		t.Fatalf("after 5 failures = %d %v", code, body)
+	}
+}
+
+func TestInstallationEndpointsNeedNoSession(t *testing.T) {
+	h := newHarness(t)
+	code, body := h.do("POST", "/api/v1/activate", map[string]string{"request": "garbage"}, false)
+	if code != http.StatusBadRequest || body["error"] == nil {
+		t.Fatalf("activate garbage = %d %v", code, body)
+	}
+	if code, _ := h.do("GET", "/api/v1/licenses", nil, false); code != http.StatusUnauthorized {
+		t.Fatalf("licenses without session = %d", code)
+	}
+}
+
+func TestRateLimiter(t *testing.T) {
+	l := newRateLimiter(2, time.Minute)
+	now := time.Now()
+	if !l.allow("a", now) || !l.allow("a", now) || l.allow("a", now) {
+		t.Fatal("third request in window must be refused")
+	}
+	if !l.allow("b", now) || !l.allow("a", now.Add(2*time.Minute)) {
+		t.Fatal("other keys and new windows must be allowed")
 	}
 }

@@ -3,6 +3,7 @@ package licensing
 import (
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"strings"
 
@@ -53,3 +54,7 @@ func DetectPlatform(serial string) (licformat.Platform, bool) {
 	}
 	return "", false
 }
+
+var b64 = base64.RawURLEncoding
+
+func splitDots(s string) []string { return strings.Split(strings.TrimSpace(s), ".") }
