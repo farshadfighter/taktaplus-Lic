@@ -16,6 +16,8 @@ import (
 
 	"github.com/farshadfighter/taktaplus-lic/internal/auth"
 	"github.com/farshadfighter/taktaplus-lic/internal/buildinfo"
+	"github.com/farshadfighter/taktaplus-lic/internal/licensing"
+	"github.com/farshadfighter/taktaplus-lic/internal/orgs"
 )
 
 // Deps are the server's collaborators.
@@ -23,6 +25,7 @@ type Deps struct {
 	Log          *slog.Logger
 	DB           *pgxpool.Pool
 	Auth         *auth.Service
+	Licensing    *licensing.Service
 	UI           fs.FS
 	CookieSecure bool
 }
@@ -31,12 +34,13 @@ type srv struct {
 	log          *slog.Logger
 	db           *pgxpool.Pool
 	auth         *auth.Service
+	lic          *licensing.Service
 	cookieSecure bool
 }
 
 // New returns the root HTTP handler.
 func New(d Deps) http.Handler {
-	s := &srv{log: d.Log, db: d.DB, auth: d.Auth, cookieSecure: d.CookieSecure}
+	s := &srv{log: d.Log, db: d.DB, auth: d.Auth, lic: d.Licensing, cookieSecure: d.CookieSecure}
 
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID, middleware.Recoverer, middleware.Timeout(60*time.Second), securityHeaders)
@@ -69,6 +73,28 @@ func New(d Deps) http.Handler {
 			r.Post("/auth/logout", s.handleLogout)
 			r.With(requireUser).Get("/me", s.handleMe)
 			r.With(requirePerm(auth.PermAuditRead)).Get("/audit", s.handleAuditList)
+
+			read := requirePerm(auth.PermCustomersRead)
+			r.With(read).Get("/customers", s.listOrgs(orgs.KindCustomer))
+			r.With(requirePerm(auth.PermCustomersWrite)).Post("/customers", s.createOrg(orgs.KindCustomer))
+			r.With(read).Get("/customers/{id}", s.getOrg)
+			r.With(requirePerm(auth.PermCustomersWrite)).Put("/customers/{id}", s.updateOrg)
+			r.With(read).Get("/resellers", s.listOrgs(orgs.KindReseller))
+			r.With(requirePerm(auth.PermResellersWrite)).Post("/resellers", s.createOrg(orgs.KindReseller))
+			r.With(read).Get("/resellers/{id}", s.getOrg)
+			r.With(requirePerm(auth.PermResellersWrite)).Put("/resellers/{id}", s.updateOrg)
+
+			lr, lw := requirePerm(auth.PermLicensesRead), requirePerm(auth.PermLicensesWrite)
+			r.With(lr).Get("/licenses", s.listLicenses)
+			r.With(lw).Post("/licenses", s.createLicense)
+			r.With(lr).Get("/licenses/{id}", s.getLicense)
+			r.With(lw).Post("/licenses/{id}/items", s.addItems)
+			r.With(lw).Post("/licenses/{id}/renew", s.renewItems)
+			r.With(lw).Post("/licenses/{id}/rma", s.replaceSerial)
+			r.With(lw).Post("/licenses/{id}/reveal-key", s.revealKey)
+			r.With(lw).Post("/licenses/{id}/file", s.downloadLicense)
+			r.With(requirePerm(auth.PermLicensesRevoke)).Post("/licenses/{id}/revoke", s.revokeLicense)
+			r.With(requirePerm(auth.PermInstallationsWrite)).Post("/licenses/{id}/release", s.releaseInstallation)
 		})
 
 		r.NotFound(func(w http.ResponseWriter, _ *http.Request) {

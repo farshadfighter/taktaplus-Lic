@@ -25,6 +25,7 @@ import (
 	"github.com/farshadfighter/taktaplus-lic/internal/auth"
 	"github.com/farshadfighter/taktaplus-lic/internal/buildinfo"
 	"github.com/farshadfighter/taktaplus-lic/internal/config"
+	"github.com/farshadfighter/taktaplus-lic/internal/licensing"
 	"github.com/farshadfighter/taktaplus-lic/internal/orgs"
 	"github.com/farshadfighter/taktaplus-lic/internal/server"
 	"github.com/farshadfighter/taktaplus-lic/internal/store"
@@ -77,6 +78,14 @@ func run(cmd string, args []string) error {
 	}
 
 	authSvc := auth.NewService(pool, cfg.MasterKey)
+	issuer, err := licensing.LoadIssuer(cfg.LicenseKeyFile, cfg.LicenseKeyPass)
+	if err != nil {
+		return fmt.Errorf("load license signing key: %w", err)
+	}
+	if issuer.KeyID() == "" {
+		log.Warn("no license signing key configured (TPLIC_LICENSE_KEY_FILE); licenses cannot be issued")
+	}
+	licSvc := licensing.NewService(pool, cfg.MasterKey, issuer, cfg.PublicURL)
 	switch cmd {
 	case "migrate":
 		return nil
@@ -87,7 +96,7 @@ func run(cmd string, args []string) error {
 	srv := &http.Server{
 		Addr: cfg.Listen,
 		Handler: server.New(server.Deps{
-			Log: log, DB: pool, Auth: authSvc, UI: web.App(), CookieSecure: cfg.CookieSecure,
+			Log: log, DB: pool, Auth: authSvc, Licensing: licSvc, UI: web.App(), CookieSecure: cfg.CookieSecure,
 		}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}

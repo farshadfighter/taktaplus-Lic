@@ -15,6 +15,9 @@ type Config struct {
 	DatabaseURL     string         // TPLIC_DATABASE_URL, required
 	MasterKey       *secretbox.Box // TPLIC_MASTER_KEY: base64 of 32 random bytes, required
 	CookieSecure    bool           // TPLIC_COOKIE_SECURE, default true; set false only for local HTTP
+	PublicURL       string         // TPLIC_PUBLIC_URL: external base URL, written into licenses for heartbeats
+	LicenseKeyFile  string         // TPLIC_LICENSE_KEY_FILE: encrypted signing key (lictool keygen); empty disables issuing
+	LicenseKeyPass  []byte         // TPLIC_LICENSE_KEY_PASSPHRASE
 	ShutdownTimeout time.Duration  // TPLIC_SHUTDOWN_TIMEOUT, default 15s
 	LogLevel        string         // TPLIC_LOG_LEVEL: debug, info, warn, error
 }
@@ -25,6 +28,9 @@ func FromEnv() (Config, error) {
 		Listen:          getenv("TPLIC_LISTEN", ":8080"),
 		DatabaseURL:     os.Getenv("TPLIC_DATABASE_URL"),
 		CookieSecure:    os.Getenv("TPLIC_COOKIE_SECURE") != "false",
+		PublicURL:       os.Getenv("TPLIC_PUBLIC_URL"),
+		LicenseKeyFile:  os.Getenv("TPLIC_LICENSE_KEY_FILE"),
+		LicenseKeyPass:  []byte(os.Getenv("TPLIC_LICENSE_KEY_PASSPHRASE")),
 		ShutdownTimeout: 15 * time.Second,
 		LogLevel:        getenv("TPLIC_LOG_LEVEL", "info"),
 	}
