@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -27,7 +28,9 @@ import (
 	"github.com/farshadfighter/taktaplus-lic/internal/config"
 	"github.com/farshadfighter/taktaplus-lic/internal/licensing"
 	"github.com/farshadfighter/taktaplus-lic/internal/orgs"
+	"github.com/farshadfighter/taktaplus-lic/internal/repo"
 	"github.com/farshadfighter/taktaplus-lic/internal/server"
+	"github.com/farshadfighter/taktaplus-lic/internal/signer"
 	"github.com/farshadfighter/taktaplus-lic/internal/store"
 	"github.com/farshadfighter/taktaplus-lic/web"
 )
@@ -93,10 +96,22 @@ func run(cmd string, args []string) error {
 		return createAdmin(ctx, pool, authSvc, args)
 	}
 
+	var pkgKey *signer.Key
+	if cfg.PackageKeyFile != "" {
+		k, err := signer.Load(cfg.PackageKeyFile, cfg.PackageKeyPass)
+		if err != nil {
+			return fmt.Errorf("load package signing key: %w", err)
+		}
+		pkgKey = &k
+	} else {
+		log.Warn("no package signing key configured; manifests cannot be published")
+	}
+	repoSvc := repo.New(pool, filepath.Join(cfg.DataDir, "repo"), pkgKey)
+
 	srv := &http.Server{
 		Addr: cfg.Listen,
 		Handler: server.New(server.Deps{
-			Log: log, DB: pool, Auth: authSvc, Licensing: licSvc, UI: web.App(), CookieSecure: cfg.CookieSecure,
+			Log: log, DB: pool, Auth: authSvc, Licensing: licSvc, Repo: repoSvc, UI: web.App(), CookieSecure: cfg.CookieSecure,
 		}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}

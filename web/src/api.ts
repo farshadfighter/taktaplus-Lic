@@ -170,3 +170,25 @@ export type ItemInput = {
   starts_on: string
   expires_on: string
 }
+
+export type RepoPackage = {
+  id: number
+  file: string
+  platform: 'fortigate' | 'fortiweb'
+  type: string
+  version: string
+  models: string[]
+  fw_min: string
+  fw_max: string
+  upgrade_from: string[]
+  notes: string
+  released_at: string
+  sha256: string
+  size: number
+  status: 'draft' | 'published' | 'withdrawn'
+  uploaded_by: string
+  created_at: string
+  in_manifest: boolean
+}
+
+export type ManifestInfo = { id: number; published_at: string; kid: string; package_count: number; published_by: string }

@@ -13,6 +13,7 @@ import LicenseDetail from './pages/LicenseDetail'
 import Offline from './pages/Offline'
 import Installations from './pages/Installations'
 import Audit from './pages/Audit'
+import Packages from './pages/Packages'
 
 function Protected() {
   const { user, loading } = useAuth()
@@ -37,6 +38,7 @@ export default function App() {
           <Route path="offline" element={<Offline />} />
           <Route path="installations" element={<Installations />} />
           <Route path="audit" element={<Audit />} />
+          <Route path="packages" element={<Packages />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

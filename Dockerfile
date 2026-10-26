@@ -19,9 +19,13 @@ RUN LDFLAGS="-s -w -X github.com/farshadfighter/taktaplus-lic/internal/buildinfo
       -X github.com/farshadfighter/taktaplus-lic/internal/buildinfo.Date=${DATE}" && \
     CGO_ENABLED=0 go build -trimpath -ldflags "$LDFLAGS" -o /out/licserver ./cmd/licserver && \
     CGO_ENABLED=0 go build -trimpath -ldflags "$LDFLAGS" -o /out/lictool ./cmd/lictool
+# The data directory must belong to the nonroot user so a fresh named volume
+# inherits a writable owner.
+RUN mkdir -p /data-root/var/lib/taktaplus-lic
 
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build /out/ /usr/local/bin/
+COPY --from=build --chown=65532:65532 /data-root/ /
 EXPOSE 8080
 ENTRYPOINT ["/usr/local/bin/licserver"]
 CMD ["serve"]

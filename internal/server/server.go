@@ -18,6 +18,7 @@ import (
 	"github.com/farshadfighter/taktaplus-lic/internal/buildinfo"
 	"github.com/farshadfighter/taktaplus-lic/internal/licensing"
 	"github.com/farshadfighter/taktaplus-lic/internal/orgs"
+	"github.com/farshadfighter/taktaplus-lic/internal/repo"
 )
 
 // Deps are the server's collaborators.
@@ -26,6 +27,7 @@ type Deps struct {
 	DB           *pgxpool.Pool
 	Auth         *auth.Service
 	Licensing    *licensing.Service
+	Repo         *repo.Service
 	UI           fs.FS
 	CookieSecure bool
 }
@@ -35,15 +37,16 @@ type srv struct {
 	db           *pgxpool.Pool
 	auth         *auth.Service
 	lic          *licensing.Service
+	repo         *repo.Service
 	cookieSecure bool
 }
 
 // New returns the root HTTP handler.
 func New(d Deps) http.Handler {
-	s := &srv{log: d.Log, db: d.DB, auth: d.Auth, lic: d.Licensing, cookieSecure: d.CookieSecure}
+	s := &srv{log: d.Log, db: d.DB, auth: d.Auth, lic: d.Licensing, repo: d.Repo, cookieSecure: d.CookieSecure}
 
 	r := chi.NewRouter()
-	r.Use(middleware.RequestID, middleware.Recoverer, middleware.Timeout(60*time.Second), securityHeaders)
+	r.Use(middleware.RequestID, middleware.Recoverer, securityHeaders)
 
 	r.Get("/healthz", func(w http.ResponseWriter, req *http.Request) {
 		ctx, cancel := context.WithTimeout(req.Context(), 2*time.Second)
@@ -63,9 +66,22 @@ func New(d Deps) http.Handler {
 			})
 		})
 
-		// Browser endpoints: cookie session + CSRF header.
+		// File transfers: no request timeout.
 		r.Group(func(r chi.Router) {
 			r.Use(csrfGuard, s.loadSession)
+			pub := requirePerm(auth.PermRepoPublish)
+			r.With(pub).Post("/packages", s.uploadPackage)
+			r.With(pub).Get("/packages/files/{sha}", s.downloadPackageAdmin)
+			r.With(requirePerm(auth.PermLicensesRead)).Get("/packages/bundle", s.downloadBundle)
+		})
+		r.Group(func(r chi.Router) {
+			r.Use(newRateLimiter(600, time.Minute).middleware)
+			r.Get("/repo/files/{sha}", s.repoFile)
+		})
+
+		// Browser endpoints: cookie session + CSRF header.
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.Timeout(60*time.Second), csrfGuard, s.loadSession)
 			r.Post("/auth/login", s.handleLogin)
 			r.Post("/auth/mfa", s.handleMFA)
 			r.Post("/auth/mfa/setup", s.handleMFASetup)
@@ -100,14 +116,22 @@ func New(d Deps) http.Handler {
 			r.With(off).Post("/activations/inspect", s.handleInspect)
 			r.With(off).Post("/activations/offline", s.handleOfflineActivate)
 			r.With(requirePerm(auth.PermInstallationsRead)).Get("/installations", s.listInstallations)
+
+			pub := requirePerm(auth.PermRepoPublish)
+			r.With(requirePerm(auth.PermLicensesRead)).Get("/packages", s.listPackages)
+			r.With(pub).Put("/packages/{id}", s.updatePackage)
+			r.With(pub).Post("/packages/{id}/status", s.setPackageStatus)
+			r.With(pub).Post("/packages/publish", s.publishManifest)
 		})
 
 		// Installation endpoints: no cookies; every request is signed by the
 		// installation key, so CSRF does not apply.
 		r.Group(func(r chi.Router) {
-			r.Use(newRateLimiter(30, time.Minute).middleware)
+			r.Use(middleware.Timeout(60*time.Second), newRateLimiter(30, time.Minute).middleware)
 			r.Post("/activate", s.handleActivate)
 			r.Post("/heartbeat", s.handleHeartbeat)
+			r.Get("/repo/manifest", s.repoManifest(false))
+			r.Get("/repo/manifest.sig", s.repoManifest(true))
 		})
 
 		r.NotFound(func(w http.ResponseWriter, _ *http.Request) {

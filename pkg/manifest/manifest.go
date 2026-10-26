@@ -46,6 +46,9 @@ const (
 	TypeWAFSignature PackageType = "waf_signature"
 	TypeIPReputation PackageType = "ip_reputation"
 	TypeGeoDB        PackageType = "geo_db"
+	// TypeFirmware is a firmware image; UpgradeFrom lists the versions that
+	// upgrade to it directly.
+	TypeFirmware PackageType = "firmware"
 )
 
 // FirmwareRange bounds the firmware versions a package supports; empty means
@@ -66,6 +69,10 @@ type Package struct {
 	Models     []string           `json:"models"`
 	Firmware   FirmwareRange      `json:"firmware"`
 	ReleasedAt time.Time          `json:"released_at"`
+	// UpgradeFrom is set for firmware images: versions (or prefixes such as
+	// "7.2") that can upgrade to this image in one step.
+	UpgradeFrom []string `json:"upgrade_from,omitempty"`
+	Notes       string   `json:"notes,omitempty"`
 }
 
 // Manifest is the catalog of available packages.
@@ -113,6 +120,14 @@ func (m *Manifest) Validate() error {
 		if len(p.Models) == 0 {
 			add("packages[%d]: models is required (use \"*\" for all)", i)
 		}
+		if len(p.UpgradeFrom) > 0 && p.Type != TypeFirmware {
+			add("packages[%d]: upgrade_from is only valid for firmware", i)
+		}
+		for _, v := range p.UpgradeFrom {
+			if _, err := parseVersion(v); err != nil {
+				add("packages[%d]: upgrade_from: %v", i, err)
+			}
+		}
 		for _, v := range []string{p.Firmware.Min, p.Firmware.Max} {
 			if v == "" {
 				continue
@@ -151,6 +166,17 @@ func (p Package) Compatible(platform licformat.Platform, model, firmware string)
 		return false
 	}
 	return true
+}
+
+// UpgradesFrom reports whether a device on version cur can install the
+// firmware image p in one step. A listed "7.2" matches every 7.2.x.
+func (p Package) UpgradesFrom(cur string) bool {
+	for _, v := range p.UpgradeFrom {
+		if v == cur || strings.HasPrefix(cur, v+".") {
+			return true
+		}
+	}
+	return false
 }
 
 func parseVersion(v string) ([]int, error) {

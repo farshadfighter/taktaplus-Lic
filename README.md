@@ -38,6 +38,8 @@ make test lint
 | `TPLIC_MASTER_KEY` | ۳۲ بایت تصادفی base64 برای رمزنگاری Secretها (الزامی) |
 | `TPLIC_PUBLIC_URL` | آدرس عمومی سرور؛ در لایسنس‌های آنلاین برای Heartbeat نوشته می‌شود |
 | `TPLIC_LICENSE_KEY_FILE` / `TPLIC_LICENSE_KEY_PASSPHRASE` | کلید امضای لایسنس (ساخته‌شده با `lictool keygen`)؛ بدون آن صدور لایسنس غیرفعال است |
+| `TPLIC_PACKAGE_KEY_FILE` / `TPLIC_PACKAGE_KEY_PASSPHRASE` | کلید امضای Manifest مخزن پکیج (`lictool keygen -kid pkg-...`)؛ جدا از کلید لایسنس |
+| `TPLIC_DATA_DIR` | محل فایل‌های پکیج (`repo/`)، پیش‌فرض `/var/lib/taktaplus-lic` |
 | `TPLIC_COOKIE_SECURE` | فقط برای توسعه‌ی محلی روی HTTP مقدار `false` |
 
 ## API نصب‌ها

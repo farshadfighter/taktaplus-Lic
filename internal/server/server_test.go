@@ -21,6 +21,7 @@ import (
 	"github.com/farshadfighter/taktaplus-lic/internal/auth"
 	"github.com/farshadfighter/taktaplus-lic/internal/licensing"
 	"github.com/farshadfighter/taktaplus-lic/internal/orgs"
+	"github.com/farshadfighter/taktaplus-lic/internal/repo"
 	"github.com/farshadfighter/taktaplus-lic/internal/secretbox"
 	"github.com/farshadfighter/taktaplus-lic/internal/signer"
 	"github.com/farshadfighter/taktaplus-lic/internal/testdb"
@@ -30,6 +31,7 @@ type harness struct {
 	t      *testing.T
 	db     *pgxpool.Pool
 	auth   *auth.Service
+	lic    *licensing.Service
 	ts     *httptest.Server
 	client *http.Client
 }
@@ -43,11 +45,13 @@ func newHarness(t *testing.T) *harness {
 	svc := auth.NewService(db, box)
 	sk, _ := signer.Generate("lic-test")
 	lic := licensing.NewService(db, box, licensing.NewIssuer(&sk), "")
+	pk, _ := signer.Generate("pkg-test")
+	rp := repo.New(db, t.TempDir(), &pk)
 	ui := fstest.MapFS{"index.html": {Data: []byte("<html>app</html>")}}
-	ts := httptest.NewServer(New(Deps{Log: slog.New(slog.NewTextHandler(io.Discard, nil)), DB: db, Auth: svc, Licensing: lic, UI: ui}))
+	ts := httptest.NewServer(New(Deps{Log: slog.New(slog.NewTextHandler(io.Discard, nil)), DB: db, Auth: svc, Licensing: lic, Repo: rp, UI: ui}))
 	t.Cleanup(ts.Close)
 	jar, _ := cookiejar.New(nil)
-	return &harness{t: t, db: db, auth: svc, ts: ts, client: &http.Client{Jar: jar}}
+	return &harness{t: t, db: db, auth: svc, lic: lic, ts: ts, client: &http.Client{Jar: jar}}
 }
 
 func (h *harness) do(method, path string, body any, csrf bool) (int, map[string]any) {

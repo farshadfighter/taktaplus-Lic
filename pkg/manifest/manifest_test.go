@@ -118,3 +118,12 @@ func TestCompareVersions(t *testing.T) {
 		}
 	}
 }
+
+func TestUpgradeFrom(t *testing.T) {
+	p := Package{Type: TypeFirmware, UpgradeFrom: []string{"7.2", "7.4.1"}}
+	for v, want := range map[string]bool{"7.2.8": true, "7.2": true, "7.20.1": false, "7.4.1": true, "7.4.2": false, "7.0.15": false} {
+		if got := p.UpgradesFrom(v); got != want {
+			t.Errorf("UpgradesFrom(%s) = %v", v, got)
+		}
+	}
+}

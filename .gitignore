@@ -5,6 +5,7 @@
 
 # Secrets: signing keys, passphrases and local env files must never be committed
 *.key
+/deploy/keys/
 *.passphrase
 .env
 .env.*

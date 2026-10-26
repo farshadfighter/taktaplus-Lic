@@ -29,8 +29,19 @@ services:
       TPLIC_DATABASE_URL: postgres://taktaplus_lic:${TPLIC_DB_PASSWORD:-taktaplus_lic}@postgres:5432/taktaplus_lic?sslmode=disable
       TPLIC_MASTER_KEY: ${TPLIC_MASTER_KEY:?set TPLIC_MASTER_KEY}
       TPLIC_COOKIE_SECURE: ${TPLIC_COOKIE_SECURE:-true}
+      TPLIC_PUBLIC_URL: ${TPLIC_PUBLIC_URL:-}
+      TPLIC_DATA_DIR: /var/lib/taktaplus-lic
+      # Encrypted signing keys (lictool keygen), mounted from ./keys.
+      TPLIC_LICENSE_KEY_FILE: ${TPLIC_LICENSE_KEY_FILE:-}
+      TPLIC_LICENSE_KEY_PASSPHRASE: ${TPLIC_LICENSE_KEY_PASSPHRASE:-}
+      TPLIC_PACKAGE_KEY_FILE: ${TPLIC_PACKAGE_KEY_FILE:-}
+      TPLIC_PACKAGE_KEY_PASSPHRASE: ${TPLIC_PACKAGE_KEY_PASSPHRASE:-}
     ports:
       - "8080:8080"
+    volumes:
+      - data:/var/lib/taktaplus-lic
+      - ./keys:/keys:ro
 
 volumes:
+  data:
   pgdata:

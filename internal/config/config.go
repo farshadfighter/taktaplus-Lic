@@ -18,6 +18,9 @@ type Config struct {
 	PublicURL       string         // TPLIC_PUBLIC_URL: external base URL, written into licenses for heartbeats
 	LicenseKeyFile  string         // TPLIC_LICENSE_KEY_FILE: encrypted signing key (lictool keygen); empty disables issuing
 	LicenseKeyPass  []byte         // TPLIC_LICENSE_KEY_PASSPHRASE
+	PackageKeyFile  string         // TPLIC_PACKAGE_KEY_FILE: encrypted manifest signing key; empty disables publishing
+	PackageKeyPass  []byte         // TPLIC_PACKAGE_KEY_PASSPHRASE
+	DataDir         string         // TPLIC_DATA_DIR: package files, default /var/lib/taktaplus-lic
 	ShutdownTimeout time.Duration  // TPLIC_SHUTDOWN_TIMEOUT, default 15s
 	LogLevel        string         // TPLIC_LOG_LEVEL: debug, info, warn, error
 }
@@ -31,6 +34,9 @@ func FromEnv() (Config, error) {
 		PublicURL:       os.Getenv("TPLIC_PUBLIC_URL"),
 		LicenseKeyFile:  os.Getenv("TPLIC_LICENSE_KEY_FILE"),
 		LicenseKeyPass:  []byte(os.Getenv("TPLIC_LICENSE_KEY_PASSPHRASE")),
+		PackageKeyFile:  os.Getenv("TPLIC_PACKAGE_KEY_FILE"),
+		PackageKeyPass:  []byte(os.Getenv("TPLIC_PACKAGE_KEY_PASSPHRASE")),
+		DataDir:         getenv("TPLIC_DATA_DIR", "/var/lib/taktaplus-lic"),
 		ShutdownTimeout: 15 * time.Second,
 		LogLevel:        getenv("TPLIC_LOG_LEVEL", "info"),
 	}

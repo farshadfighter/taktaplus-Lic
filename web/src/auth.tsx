@@ -56,7 +56,7 @@ const perms: Record<string, string[]> = {
   owner: ['*'],
   admin: ['customers.write', 'licenses.write', 'licenses.revoke', 'activation.offline', 'installations.write', 'resellers.write', 'audit.read'],
   support: ['activation.offline', 'installations.write'],
-  publisher: [],
+  publisher: ['repo.publish'],
   viewer: [],
 }
 
