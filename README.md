@@ -22,7 +22,9 @@
 cp .env.example .env
 make db-up      # PostgreSQL روی 127.0.0.1:5433
 make web        # ساخت رابط وب (یک‌بار، یا بعد از تغییر web/)
+# TPLIC_MASTER_KEY را در .env پر کنید: head -c32 /dev/urandom | base64
 make run        # http://localhost:8080
+./bin/licserver create-admin -email you@example.com   # ساخت اولین کاربر (Owner)
 make test lint
 ```
 

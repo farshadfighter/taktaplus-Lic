@@ -27,6 +27,8 @@ services:
     environment:
       TPLIC_LISTEN: ":8080"
       TPLIC_DATABASE_URL: postgres://taktaplus_lic:${TPLIC_DB_PASSWORD:-taktaplus_lic}@postgres:5432/taktaplus_lic?sslmode=disable
+      TPLIC_MASTER_KEY: ${TPLIC_MASTER_KEY:?set TPLIC_MASTER_KEY}
+      TPLIC_COOKIE_SECURE: ${TPLIC_COOKIE_SECURE:-true}
     ports:
       - "8080:8080"
 
