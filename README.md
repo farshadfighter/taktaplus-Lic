@@ -30,6 +30,23 @@ make test lint
 
 برای رابط وب با Hot Reload: `cd web && npm run dev` (درخواست‌های `/api` به پورت 8080 فرستاده می‌شوند).
 
+## تنظیمات سرور
+
+| متغیر | توضیح |
+|---|---|
+| `TPLIC_DATABASE_URL` | اتصال PostgreSQL (الزامی) |
+| `TPLIC_MASTER_KEY` | ۳۲ بایت تصادفی base64 برای رمزنگاری Secretها (الزامی) |
+| `TPLIC_PUBLIC_URL` | آدرس عمومی سرور؛ در لایسنس‌های آنلاین برای Heartbeat نوشته می‌شود |
+| `TPLIC_LICENSE_KEY_FILE` / `TPLIC_LICENSE_KEY_PASSPHRASE` | کلید امضای لایسنس (ساخته‌شده با `lictool keygen`)؛ بدون آن صدور لایسنس غیرفعال است |
+| `TPLIC_COOKIE_SECURE` | فقط برای توسعه‌ی محلی روی HTTP مقدار `false` |
+
+## API نصب‌ها
+
+| مسیر | توضیح |
+|---|---|
+| `POST /api/v1/activate` | `{"request": "TPREQ1…"}` ← `{"license": "TPLIC1…", "license_id": "LIC-…"}` |
+| `POST /api/v1/heartbeat` | درخواست refresh ← `{"status": "updated" \| "unchanged"}` یا `410` با `revoked` |
+
 ## کلیدها
 
 کلید خصوصی **هرگز** وارد ریپازیتوری نمی‌شود (`*.key` در `.gitignore` است).

@@ -1,38 +1,45 @@
-import { useEffect, useState } from 'react'
-import { Card, Descriptions, Layout, Typography } from 'antd'
+import { Spin } from 'antd'
+import { Navigate, Route, Routes } from 'react-router'
+import { AuthProvider, useAuth } from './auth'
+import AppLayout from './AppLayout'
+import Login from './pages/Login'
+import Dashboard from './pages/Dashboard'
+import Customers from './pages/Customers'
+import CustomerDetail from './pages/CustomerDetail'
+import Resellers from './pages/Resellers'
+import Licenses from './pages/Licenses'
+import LicenseNew from './pages/LicenseNew'
+import LicenseDetail from './pages/LicenseDetail'
+import Offline from './pages/Offline'
+import Installations from './pages/Installations'
+import Audit from './pages/Audit'
 
-type Version = { version: string; commit: string; date: string }
+function Protected() {
+  const { user, loading } = useAuth()
+  if (loading) return <Spin fullscreen />
+  if (!user) return <Navigate to="/login" replace />
+  return <AppLayout />
+}
 
 export default function App() {
-  const [version, setVersion] = useState<Version | null>(null)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    fetch('/api/v1/version')
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(r.statusText))))
-      .then(setVersion)
-      .catch((e: Error) => setError(e.message))
-  }, [])
-
   return (
-    <Layout style={{ minHeight: '100vh' }}>
-      <Layout.Header>
-        <Typography.Title level={4} style={{ color: '#fff', margin: '16px 0' }}>
-          سرور لایسنس تکتاپلاس
-        </Typography.Title>
-      </Layout.Header>
-      <Layout.Content style={{ padding: 24 }}>
-        <Card title="وضعیت سرور">
-          {error ? (
-            <Typography.Text type="danger">خطا در ارتباط با سرور: {error}</Typography.Text>
-          ) : (
-            <Descriptions column={1}>
-              <Descriptions.Item label="نسخه">{version?.version ?? '…'}</Descriptions.Item>
-              <Descriptions.Item label="کامیت">{version?.commit ?? '…'}</Descriptions.Item>
-            </Descriptions>
-          )}
-        </Card>
-      </Layout.Content>
-    </Layout>
+    <AuthProvider>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route element={<Protected />}>
+          <Route index element={<Dashboard />} />
+          <Route path="customers" element={<Customers />} />
+          <Route path="customers/:id" element={<CustomerDetail />} />
+          <Route path="resellers" element={<Resellers />} />
+          <Route path="licenses" element={<Licenses />} />
+          <Route path="licenses/new" element={<LicenseNew />} />
+          <Route path="licenses/:id" element={<LicenseDetail />} />
+          <Route path="offline" element={<Offline />} />
+          <Route path="installations" element={<Installations />} />
+          <Route path="audit" element={<Audit />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Route>
+      </Routes>
+    </AuthProvider>
   )
 }
