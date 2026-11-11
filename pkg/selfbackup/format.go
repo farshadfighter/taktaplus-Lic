@@ -98,8 +98,10 @@ type Header struct {
 }
 
 type encWriter struct {
-	w     io.Writer
-	aead  interface{ Seal(dst, nonce, plaintext, ad []byte) []byte }
+	w    io.Writer
+	aead interface {
+		Seal(dst, nonce, plaintext, ad []byte) []byte
+	}
 	ad    []byte
 	nonce [24]byte
 	n     uint64
@@ -195,8 +197,10 @@ func ReadHeader(r io.Reader) (Header, []byte, error) {
 }
 
 type decReader struct {
-	r     *bufio.Reader
-	aead  interface{ Open(dst, nonce, ciphertext, ad []byte) ([]byte, error) }
+	r    *bufio.Reader
+	aead interface {
+		Open(dst, nonce, ciphertext, ad []byte) ([]byte, error)
+	}
 	ad    []byte
 	nonce [24]byte
 	n     uint64

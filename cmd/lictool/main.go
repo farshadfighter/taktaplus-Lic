@@ -16,10 +16,10 @@ import (
 
 	"github.com/farshadfighter/taktaplus-lic/internal/buildinfo"
 	"github.com/farshadfighter/taktaplus-lic/internal/signer"
-	"github.com/farshadfighter/taktaplus-lic/pkg/release"
 	"github.com/farshadfighter/taktaplus-lic/pkg/keys"
 	"github.com/farshadfighter/taktaplus-lic/pkg/licformat"
 	"github.com/farshadfighter/taktaplus-lic/pkg/manifest"
+	"github.com/farshadfighter/taktaplus-lic/pkg/release"
 )
 
 const passphraseEnv = "TPLIC_KEY_PASSPHRASE"
