@@ -23,9 +23,14 @@ RUN LDFLAGS="-s -w -X github.com/farshadfighter/taktaplus-lic/internal/buildinfo
 # inherits a writable owner.
 RUN mkdir -p /data-root/var/lib/taktaplus-lic
 
-FROM gcr.io/distroless/static-debian12:nonroot
+# Alpine rather than distroless: self-backups use the PostgreSQL client tools
+# and the upgrade scripts check health with wget.
+FROM alpine:3.20
+RUN apk add --no-cache ca-certificates postgresql16-client && \
+    addgroup -S -g 65532 nonroot && adduser -S -D -H -u 65532 -G nonroot nonroot
 COPY --from=build /out/ /usr/local/bin/
 COPY --from=build --chown=65532:65532 /data-root/ /
+USER 65532:65532
 EXPOSE 8080
 ENTRYPOINT ["/usr/local/bin/licserver"]
 CMD ["serve"]

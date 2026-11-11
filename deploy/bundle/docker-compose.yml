@@ -1,0 +1,62 @@
+# TaktaPlus license server, installed by install.sh into $TPLIC_HOME
+# (default /opt/taktaplus-lic). Settings live in .env next to this file;
+# images come from the offline bundle (docker load). Put a TLS reverse proxy
+# in front of port TPLIC_HTTP_PORT.
+name: taktaplus-lic
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: taktaplus_lic
+      POSTGRES_PASSWORD: ${TPLIC_DB_PASSWORD:?}
+      POSTGRES_DB: taktaplus_lic
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U taktaplus_lic"]
+      interval: 5s
+      retries: 20
+
+  licserver:
+    image: taktaplus-lic:${TPLIC_VERSION:?}
+    pull_policy: never
+    restart: unless-stopped
+    command: ["serve"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      TPLIC_LISTEN: ":8080"
+      TPLIC_DATABASE_URL: postgres://taktaplus_lic:${TPLIC_DB_PASSWORD}@postgres:5432/taktaplus_lic?sslmode=disable
+      TPLIC_MASTER_KEY: ${TPLIC_MASTER_KEY:?}
+      TPLIC_COOKIE_SECURE: ${TPLIC_COOKIE_SECURE:-true}
+      TPLIC_PUBLIC_URL: ${TPLIC_PUBLIC_URL:-}
+      TPLIC_DATA_DIR: /var/lib/taktaplus-lic
+      # Encrypted signing keys (lictool keygen) under data/keys, so backups
+      # include them; their passphrases stay in .env.
+      TPLIC_LICENSE_KEY_FILE: ${TPLIC_LICENSE_KEY_FILE:-}
+      TPLIC_LICENSE_KEY_PASSPHRASE: ${TPLIC_LICENSE_KEY_PASSPHRASE:-}
+      TPLIC_PACKAGE_KEY_FILE: ${TPLIC_PACKAGE_KEY_FILE:-}
+      TPLIC_PACKAGE_KEY_PASSPHRASE: ${TPLIC_PACKAGE_KEY_PASSPHRASE:-}
+    ports:
+      - "${TPLIC_HTTP_PORT:-8080}:8080"
+    volumes:
+      - ./data:/var/lib/taktaplus-lic
+
+  # Applies upgrades uploaded in the panel; the only container with the
+  # Docker socket. It opens no port and has no network.
+  updater:
+    image: ${TPLIC_UPDATER_IMAGE:-docker:27-cli}
+    pull_policy: never
+    restart: unless-stopped
+    network_mode: none
+    working_dir: ${TPLIC_HOME:?}
+    entrypoint: ["sh", "scripts/updater.sh"]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${TPLIC_HOME}:${TPLIC_HOME}
+
+volumes:
+  pgdata:

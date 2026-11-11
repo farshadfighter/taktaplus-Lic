@@ -356,3 +356,23 @@ func (s *Service) SetUserActive(ctx context.Context, orgID, userID int64, active
 	}
 	return err
 }
+
+// Reauthenticate checks the password and current TOTP code of a signed-in
+// user again before a sensitive action. Failures count toward the lockout.
+func (s *Service) Reauthenticate(ctx context.Context, userID int64, password, code string) error {
+	r, err := s.checkCode(ctx, userID, code)
+	if err != nil {
+		return err
+	}
+	ok, err := CheckPassword(r.hash, password)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		if err := s.recordFailure(ctx, userID, r.failed); err != nil {
+			return err
+		}
+		return ErrInvalidCredentials
+	}
+	return nil
+}

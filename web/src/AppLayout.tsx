@@ -37,7 +37,10 @@ function NavMenu({ onNavigate }: { onNavigate?: () => void }) {
     },
     { type: 'group' as const, label: 'فروش', children: [link('/resellers', 'نمایندگان')] },
     { type: 'group' as const, label: 'مخزن', children: [link('/packages', 'پکیج‌ها و فرم‌ور')] },
-    ...(can(user, 'audit.read') ? [{ type: 'group' as const, label: 'سیستم', children: [link('/audit', 'لاگ ممیزی')] }] : []),
+    ...(can(user, 'audit.read') || can(user, 'system.manage') ? [{ type: 'group' as const, label: 'سیستم', children: [
+      ...(can(user, 'audit.read') ? [link('/audit', 'لاگ ممیزی')] : []),
+      ...(can(user, 'system.manage') ? [link('/system', 'بکاپ و ارتقای سیستم')] : []),
+    ] }] : []),
   ]
   return <Menu mode="inline" selectedKeys={[key === '/licenses' && pathname === '/licenses/new' ? '/licenses' : key]} items={items} style={{ borderInlineEnd: 0 }} />
 }

@@ -14,6 +14,7 @@ import Offline from './pages/Offline'
 import Installations from './pages/Installations'
 import Audit from './pages/Audit'
 import Packages from './pages/Packages'
+import SystemPage from './pages/System'
 import PortalHome from './pages/PortalHome'
 import PortalIssue from './pages/PortalIssue'
 
@@ -52,6 +53,7 @@ export default function App() {
           <Route path="installations" element={<Installations />} />
           <Route path="audit" element={<Audit />} />
           <Route path="packages" element={<Packages />} />
+          <Route path="system" element={<SystemPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>
