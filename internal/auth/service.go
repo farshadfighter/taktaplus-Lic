@@ -309,3 +309,50 @@ var dummyHash = func() string {
 	}
 	return h
 }()
+
+// UserInfo is a user as listed to administrators.
+type UserInfo struct {
+	ID          int64      `json:"id"`
+	Email       string     `json:"email"`
+	Name        string     `json:"name"`
+	Role        Role       `json:"role"`
+	TOTPEnabled bool       `json:"totp_enabled"`
+	Active      bool       `json:"active"`
+	LastLoginAt *time.Time `json:"last_login_at"`
+	CreatedAt   time.Time  `json:"created_at"`
+}
+
+// OrgUsers lists the users of an organization.
+func (s *Service) OrgUsers(ctx context.Context, orgID int64) ([]UserInfo, error) {
+	rows, err := s.db.Query(ctx, `SELECT id, email, name, role, totp_enabled, active, last_login_at, created_at
+		FROM users WHERE org_id = $1 ORDER BY email`, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []UserInfo{}
+	for rows.Next() {
+		var u UserInfo
+		if err := rows.Scan(&u.ID, &u.Email, &u.Name, &u.Role, &u.TOTPEnabled, &u.Active, &u.LastLoginAt, &u.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, u)
+	}
+	return out, rows.Err()
+}
+
+// SetUserActive enables or disables a user of an organization; disabling
+// ends the user's sessions.
+func (s *Service) SetUserActive(ctx context.Context, orgID, userID int64, active bool) error {
+	tag, err := s.db.Exec(ctx, `UPDATE users SET active = $3 WHERE id = $2 AND org_id = $1`, orgID, userID, active)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return pgx.ErrNoRows
+	}
+	if !active {
+		_, err = s.db.Exec(ctx, `DELETE FROM sessions WHERE user_id = $1`, userID)
+	}
+	return err
+}

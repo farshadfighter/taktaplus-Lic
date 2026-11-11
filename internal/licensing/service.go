@@ -43,6 +43,17 @@ type Actor struct {
 	Name   string
 	IP     string
 	Source string
+	// Check, when set, runs inside the change's transaction once the
+	// license is known. Portals use it to keep users to their own licenses
+	// and to charge reseller credit atomically with the change.
+	Check func(ctx context.Context, tx pgx.Tx, licenseID int64) error
+}
+
+func (a Actor) check(ctx context.Context, tx pgx.Tx, licenseID int64) error {
+	if a.Check == nil {
+		return nil
+	}
+	return a.Check(ctx, tx, licenseID)
 }
 
 // Service implements license operations.
@@ -225,6 +236,9 @@ func (s *Service) Create(ctx context.Context, a Actor, in CreateInput) (Detail, 
 	if err := insertItems(ctx, tx, id, in.Items); err != nil {
 		return Detail{}, "", err
 	}
+	if err := a.check(ctx, tx, id); err != nil {
+		return Detail{}, "", err
+	}
 	if err := s.logTx(ctx, tx, a, "license.create", code, map[string]any{"items": len(in.Items)}); err != nil {
 		return Detail{}, "", err
 	}
@@ -258,6 +272,9 @@ func (s *Service) AddItems(ctx context.Context, a Actor, id int64, items []ItemI
 		if err := insertItems(ctx, tx, id, items); err != nil {
 			return err
 		}
+		if err := a.check(ctx, tx, id); err != nil {
+			return err
+		}
 		return s.logTx(ctx, tx, a, "license.add_items", code, map[string]any{"items": len(items)})
 	})
 }
@@ -284,6 +301,9 @@ func (s *Service) Renew(ctx context.Context, a Actor, id int64, itemIDs []int64,
 		}
 		if int(tag.RowsAffected()) != len(itemIDs) {
 			return invalid("some items do not belong to this license or the date is before their start")
+		}
+		if err := a.check(ctx, tx, id); err != nil {
+			return err
 		}
 		return s.logTx(ctx, tx, a, "license.renew", code, map[string]any{"items": itemIDs, "expires_on": expiresOn})
 	})
@@ -493,6 +513,9 @@ func (s *Service) IssueFile(ctx context.Context, a Actor, id int64) (string, err
 	err := s.inTx(ctx, func(tx pgx.Tx) error {
 		code, err := lockActive(ctx, tx, id)
 		if err != nil {
+			return err
+		}
+		if err := a.check(ctx, tx, id); err != nil {
 			return err
 		}
 		if token, err = s.issueTx(ctx, tx, id, "manual download", "download", a.UserID); err != nil {
