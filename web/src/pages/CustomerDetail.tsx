@@ -7,6 +7,7 @@ import { faDate, faNum } from '../format'
 import { ExpiryTag, Mono, PageHeader, statusTag } from '../ui'
 import { useFetch } from '../useFetch'
 import OrgForm, { type OrgFormValues } from './OrgForm'
+import OrgUsers from '../OrgUsers'
 
 export default function CustomerDetail() {
   const { id } = useParams()
@@ -77,6 +78,11 @@ export default function CustomerDetail() {
           ]}
         />
       </Card>
+      {o && (
+        <Card title="کاربران پورتال مشتری" style={{ marginTop: 16 }} styles={{ body: { padding: 0 } }}>
+          <OrgUsers base={`/orgs/${o.id}/users`} writable={can(user, 'customers.write')} />
+        </Card>
+      )}
       <OrgForm kind="customer" open={editing} initial={o} busy={busy} onCancel={() => setEditing(false)} onSubmit={save} />
     </>
   )

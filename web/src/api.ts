@@ -192,3 +192,27 @@ export type RepoPackage = {
 }
 
 export type ManifestInfo = { id: number; published_at: string; kid: string; package_count: number; published_by: string }
+
+// --- portals (phase 5) ---
+
+export type Credits = { serial_years: number; user_years: number }
+export type CreditTx = {
+  id: number
+  at: string
+  serial_years: number
+  user_years: number
+  balance_serial: number
+  balance_user: number
+  description: string
+  license_code: string
+  by: string
+}
+export type PortalUser = { id: number; email: string; name: string; role: string; totp_enabled: boolean; active: boolean; last_login_at: string | null; created_at: string }
+export type PortalOverview = {
+  org: Org
+  licenses: LicenseSummary[]
+  details?: LicenseDetail[]
+  credits?: Credits
+  transactions?: CreditTx[]
+  customers?: Org[]
+}

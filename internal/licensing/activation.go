@@ -234,6 +234,11 @@ func (s *Service) Activate(ctx context.Context, token, method, ip string, a *Act
 		if err != nil {
 			return err
 		}
+		if a != nil && lic.id != 0 {
+			if err := a.check(ctx, tx, lic.id); err != nil {
+				return err
+			}
+		}
 		if c := failed(checks); c != nil {
 			return rejectFor(c)
 		}

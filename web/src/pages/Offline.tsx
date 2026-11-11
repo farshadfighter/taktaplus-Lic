@@ -17,7 +17,9 @@ const checkNames: Record<string, string> = {
   installation_active: 'نصب آزاد نشده',
 }
 
-export default function Offline() {
+// Offline runs the offline activation flow; base is the API prefix
+// (staff or portal) and portal hides staff links.
+export default function Offline({ base = '/activations', portal = false }: { base?: string; portal?: boolean }) {
   const [token, setToken] = useState('')
   const [inspection, setInspection] = useState<Inspection | null>(null)
   const [issued, setIssued] = useState<{ license: string; license_id: string } | null>(null)
@@ -29,7 +31,7 @@ export default function Offline() {
     setIssued(null)
     setBusy(true)
     try {
-      setInspection(await api.post<Inspection>('/activations/inspect', { request: text.trim() }))
+      setInspection(await api.post<Inspection>(`${base}/inspect`, { request: text.trim() }))
     } catch (e) {
       setInspection(null)
       message.error((e as Error).message)
@@ -41,7 +43,7 @@ export default function Offline() {
   async function issue() {
     setBusy(true)
     try {
-      setIssued(await api.post('/activations/offline', { request: token }))
+      setIssued(await api.post(`${base}/offline`, { request: token }))
     } catch (e) {
       message.error((e as Error).message)
     } finally {
@@ -76,7 +78,7 @@ export default function Offline() {
             <Card title="۲. محتوای درخواست">
               <Descriptions column={1} size="small">
                 <Descriptions.Item label="نوع">{req.type === 'activate' ? 'فعال‌سازی' : 'به‌روزرسانی'}</Descriptions.Item>
-                <Descriptions.Item label="لایسنس">{inspection.license_id ? <Link to={`/licenses/${inspection.license_id}`}><Mono>{inspection.license_code}</Mono></Link> : '—'} {inspection.customer && `· ${inspection.customer}`}</Descriptions.Item>
+                <Descriptions.Item label="لایسنس">{inspection.license_id && !portal ? <Link to={`/licenses/${inspection.license_id}`}><Mono>{inspection.license_code}</Mono></Link> : <Mono>{inspection.license_code || '—'}</Mono>} {inspection.customer && `· ${inspection.customer}`}</Descriptions.Item>
                 <Descriptions.Item label="شناسه‌ی نصب"><Mono>{req.installation_id}</Mono></Descriptions.Item>
                 <Descriptions.Item label="نسخه"><Mono>{req.product_version}</Mono></Descriptions.Item>
                 <Descriptions.Item label="زمان ساخت">{faDateTime(req.created_at)}</Descriptions.Item>

@@ -8,6 +8,7 @@ const { Sider, Header, Content } = Layout
 
 const roleNames: Record<string, string> = {
   owner: 'مالک', admin: 'مدیر', support: 'پشتیبانی', publisher: 'انتشار پکیج', viewer: 'مشاهده‌گر',
+  customer: 'پورتال مشتری', reseller: 'پورتال نماینده',
 }
 
 function NavMenu({ onNavigate }: { onNavigate?: () => void }) {
@@ -15,6 +16,14 @@ function NavMenu({ onNavigate }: { onNavigate?: () => void }) {
   const { pathname } = useLocation()
   const key = '/' + (pathname.split('/')[1] ?? '')
   const link = (to: string, label: string) => ({ key: to, label: <Link to={to} onClick={onNavigate}>{label}</Link> })
+  if (user?.role === 'customer' || user?.role === 'reseller') {
+    const portalItems = [
+      link('/portal', user.role === 'reseller' ? 'داشبورد نماینده' : 'لایسنس‌های من'),
+      ...(user.role === 'reseller' ? [link('/portal/issue', 'صدور و تمدید')] : []),
+      link('/portal/activation', 'فعال‌سازی آفلاین'),
+    ]
+    return <Menu mode="inline" selectedKeys={[pathname]} items={portalItems} style={{ borderInlineEnd: 0 }} />
+  }
   const items = [
     link('/', 'داشبورد'),
     {
