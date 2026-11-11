@@ -19,8 +19,9 @@ import (
 // DumpEntry is the tar entry holding the pg_dump output; data files are
 // under DataPrefix.
 const (
-	DumpEntry  = "db.dump"
-	DataPrefix = "data/"
+	DumpEntry   = "db.dump"
+	DataPrefix  = "data/"
+	ExtraPrefix = "extra/"
 )
 
 // Options say what to back up or restore.
@@ -30,6 +31,9 @@ type Options struct {
 	PgRestore   string   // pg_restore binary, default "pg_restore"
 	DataDir     string   // "" skips data files
 	Exclude     []string // top-level names under DataDir left out (and kept on restore)
+	// Extra are small named values stored with the backup, such as the
+	// installation's master key; Restore returns them.
+	Extra map[string][]byte
 }
 
 func (o Options) bin(name, def string) string {
@@ -67,6 +71,20 @@ func Write(ctx context.Context, w io.Writer, o Options) error {
 	}
 	if _, err := io.Copy(tw, tmp); err != nil {
 		return err
+	}
+	names := make([]string, 0, len(o.Extra))
+	for n := range o.Extra {
+		names = append(names, n)
+	}
+	slices.Sort(names)
+	for _, n := range names {
+		v := o.Extra[n]
+		if err := tw.WriteHeader(&tar.Header{Name: ExtraPrefix + n, Mode: 0o600, Size: int64(len(v)), ModTime: st.ModTime(), Typeflag: tar.TypeReg}); err != nil {
+			return err
+		}
+		if _, err := tw.Write(v); err != nil {
+			return err
+		}
 	}
 	if o.DataDir != "" {
 		err = filepath.WalkDir(o.DataDir, func(p string, d fs.DirEntry, err error) error {
@@ -116,8 +134,15 @@ func Write(ctx context.Context, w io.Writer, o Options) error {
 }
 
 // Restore replaces the database and the data files with the content of the
-// tar stream r. Files under DataDir that are not excluded are removed first.
-func Restore(ctx context.Context, r io.Reader, o Options) error {
+// tar stream r and returns the extra values. Files under DataDir that are not
+// excluded are removed first.
+func Restore(ctx context.Context, r io.Reader, o Options) (map[string][]byte, error) {
+	extra := map[string][]byte{}
+	err := restore(ctx, r, o, extra)
+	return extra, err
+}
+
+func restore(ctx context.Context, r io.Reader, o Options, extra map[string][]byte) error {
 	tr := tar.NewReader(r)
 	h, err := tr.Next()
 	if err != nil || h.Name != DumpEntry {
@@ -129,58 +154,83 @@ func Restore(ctx context.Context, r io.Reader, o Options) error {
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("pg_restore: %v: %s", err, strings.TrimSpace(stderr.String()))
 	}
-	if o.DataDir == "" {
-		return nil
-	}
-	entries, err := os.ReadDir(o.DataDir)
-	if err != nil && !os.IsNotExist(err) {
-		return err
-	}
-	for _, e := range entries {
-		if !slices.Contains(o.Exclude, e.Name()) {
-			if err := os.RemoveAll(filepath.Join(o.DataDir, e.Name())); err != nil {
-				return err
+	cleaned := false
+	clean := func() error {
+		if cleaned || o.DataDir == "" {
+			return nil
+		}
+		cleaned = true
+		entries, err := os.ReadDir(o.DataDir)
+		if err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		for _, e := range entries {
+			if !slices.Contains(o.Exclude, e.Name()) {
+				if err := os.RemoveAll(filepath.Join(o.DataDir, e.Name())); err != nil {
+					return err
+				}
 			}
 		}
+		return nil
 	}
 	for {
 		h, err := tr.Next()
 		if err == io.EOF {
-			return nil
+			return clean()
 		}
 		if err != nil {
 			return err
 		}
-		rel, ok := strings.CutPrefix(h.Name, DataPrefix)
-		clean := path.Clean(strings.TrimSuffix(rel, "/"))
-		if !ok || clean == "." || clean == ".." || strings.HasPrefix(clean, "../") || strings.HasPrefix(clean, "/") {
-			return fmt.Errorf("unexpected entry %q in the backup", h.Name)
-		}
-		if top, _, _ := strings.Cut(clean, "/"); slices.Contains(o.Exclude, top) {
+		if name, ok := strings.CutPrefix(h.Name, ExtraPrefix); ok {
+			if h.Size > 1<<20 {
+				return fmt.Errorf("extra entry %q is too large", name)
+			}
+			v, err := io.ReadAll(tr)
+			if err != nil {
+				return err
+			}
+			extra[name] = v
 			continue
 		}
-		p := filepath.Join(o.DataDir, filepath.FromSlash(clean))
-		mode := os.FileMode(h.Mode).Perm()
-		switch h.Typeflag {
-		case tar.TypeDir:
-			if err := os.MkdirAll(p, mode|0o700); err != nil {
-				return err
-			}
-		case tar.TypeReg:
-			if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
-				return err
-			}
-			f, err := os.OpenFile(p, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
-			if err != nil {
-				return err
-			}
-			_, err = io.CopyN(f, tr, h.Size)
-			if cerr := f.Close(); err == nil {
-				err = cerr
-			}
-			if err != nil {
-				return err
-			}
+		if o.DataDir == "" {
+			continue
+		}
+		if err := clean(); err != nil {
+			return err
+		}
+		if err := restoreEntry(tr, h, o); err != nil {
+			return err
 		}
 	}
+}
+
+func restoreEntry(tr *tar.Reader, h *tar.Header, o Options) error {
+	rel, ok := strings.CutPrefix(h.Name, DataPrefix)
+	clean := path.Clean(strings.TrimSuffix(rel, "/"))
+	if !ok || clean == "." || clean == ".." || strings.HasPrefix(clean, "../") || strings.HasPrefix(clean, "/") {
+		return fmt.Errorf("unexpected entry %q in the backup", h.Name)
+	}
+	if top, _, _ := strings.Cut(clean, "/"); slices.Contains(o.Exclude, top) {
+		return nil
+	}
+	p := filepath.Join(o.DataDir, filepath.FromSlash(clean))
+	mode := os.FileMode(h.Mode).Perm()
+	switch h.Typeflag {
+	case tar.TypeDir:
+		return os.MkdirAll(p, mode|0o700)
+	case tar.TypeReg:
+		if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+			return err
+		}
+		f, err := os.OpenFile(p, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
+		if err != nil {
+			return err
+		}
+		_, err = io.CopyN(f, tr, h.Size)
+		if cerr := f.Close(); err == nil {
+			err = cerr
+		}
+		return err
+	}
+	return nil
 }

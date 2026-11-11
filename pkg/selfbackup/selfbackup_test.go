@@ -88,7 +88,7 @@ func TestWriteRestore(t *testing.T) {
 	_ = os.WriteFile(filepath.Join(data, "backups", "1", "cfg.enc"), []byte("CONFIG"), 0o600)
 	_ = os.MkdirAll(filepath.Join(data, "system-backups"), 0o700)
 	_ = os.WriteFile(filepath.Join(data, "system-backups", "old.tpbak"), []byte("x"), 0o600)
-	o := Options{DatabaseURL: url, DataDir: data, Exclude: []string{"system-backups"}}
+	o := Options{DatabaseURL: url, DataDir: data, Exclude: []string{"system-backups"}, Extra: map[string][]byte{"master.key": []byte("MK")}}
 	key, _ := NewKey("correct horse battery")
 	var tarBuf bytes.Buffer
 	if err := Write(context.Background(), &tarBuf, o); err != nil {
@@ -104,8 +104,12 @@ func TestWriteRestore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := Restore(context.Background(), r, o); err != nil {
+	extra, err := Restore(context.Background(), r, o)
+	if err != nil {
 		t.Fatal(err)
+	}
+	if string(extra["master.key"]) != "MK" {
+		t.Fatalf("extra = %q", extra)
 	}
 	if v := psql("SELECT v FROM selfbackup_t"); v != "before" {
 		t.Fatalf("db = %q", v)
