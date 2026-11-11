@@ -210,7 +210,7 @@ func charge(a Actor, resellerID int64, serialYears, userYears int, desc string) 
 		}
 		var code string
 		_ = tx.QueryRow(ctx, `SELECT code FROM licenses WHERE id = $1`, licenseID).Scan(&code)
-		return changeCredits(ctx, tx, resellerID, -serialYears, -userYears, code+": "+desc, &licenseID, a.UserID)
+		return changeCredits(ctx, tx, resellerID, -serialYears, -userYears, code+" · "+desc, &licenseID, a.UserID)
 	}
 	return a
 }
@@ -225,8 +225,19 @@ func (s *Service) resellerCustomer(ctx context.Context, resellerID, customerID i
 	return nil
 }
 
-func plural(n int, one string) string {
-	return fmt.Sprintf("%d %s", n, one)
+var faDigits = strings.NewReplacer("0", "۰", "1", "۱", "2", "۲", "3", "۳", "4", "۴", "5", "۵", "6", "۶", "7", "۷", "8", "۸", "9", "۹")
+
+// orderText describes an order in Persian for the reseller's statement,
+// e.g. "تمدید ۲ سریال و ۵۰ کاربر 2FA برای ۱ سال".
+func orderText(verb string, serials, users, years int) string {
+	var parts []string
+	if serials > 0 {
+		parts = append(parts, fmt.Sprintf("%d سریال", serials))
+	}
+	if users > 0 {
+		parts = append(parts, fmt.Sprintf("%d کاربر 2FA", users))
+	}
+	return faDigits.Replace(fmt.Sprintf("%s %s برای %d سال", verb, strings.Join(parts, " و "), years))
 }
 
 // ResellerCreate issues a new license for one of the reseller's customers,
@@ -239,7 +250,7 @@ func (s *Service) ResellerCreate(ctx context.Context, a Actor, resellerID int64,
 	if err != nil {
 		return Detail{}, "", err
 	}
-	desc := fmt.Sprintf("new license: %s, %s, %s", plural(len(items)-min(o.OTPUsers, 1), "serial(s)"), plural(o.OTPUsers, "2FA user(s)"), plural(o.Years, "year(s)"))
+	desc := orderText("لایسنس جدید:", len(items)-min(o.OTPUsers, 1), o.OTPUsers, o.Years)
 	return s.Create(ctx, charge(a, resellerID, sy, uy, desc), CreateInput{CustomerID: o.CustomerID, ResellerID: &resellerID, Mode: o.Mode, Items: items})
 }
 
@@ -250,7 +261,7 @@ func (s *Service) ResellerAdd(ctx context.Context, a Actor, resellerID, licenseI
 	if err != nil {
 		return err
 	}
-	desc := fmt.Sprintf("added %s, %s for %s", plural(len(items)-min(o.OTPUsers, 1), "serial(s)"), plural(o.OTPUsers, "2FA user(s)"), plural(o.Years, "year(s)"))
+	desc := orderText("افزودن", len(items)-min(o.OTPUsers, 1), o.OTPUsers, o.Years)
 	return s.AddItems(ctx, charge(a, resellerID, sy, uy, desc), licenseID, items)
 }
 
@@ -282,7 +293,7 @@ func (s *Service) ResellerRenew(ctx context.Context, a Actor, resellerID, licens
 		if int(tag.RowsAffected()) != len(itemIDs) {
 			return invalid("some items do not belong to this license")
 		}
-		desc := fmt.Sprintf("renewed %s, %s for %s", plural(devices, "serial(s)"), plural(users, "2FA user(s)"), plural(years, "year(s)"))
+		desc := orderText("تمدید", devices, users, years)
 		if err := charge(a, resellerID, devices*years, users*years, desc).check(ctx, tx, licenseID); err != nil {
 			return err
 		}

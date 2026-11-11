@@ -14,6 +14,16 @@ import Offline from './pages/Offline'
 import Installations from './pages/Installations'
 import Audit from './pages/Audit'
 import Packages from './pages/Packages'
+import PortalHome from './pages/PortalHome'
+import PortalIssue from './pages/PortalIssue'
+
+const isPortal = (role?: string) => role === 'customer' || role === 'reseller'
+
+// Home sends portal users to their portal.
+function Home() {
+  const { user } = useAuth()
+  return isPortal(user?.role) ? <Navigate to="/portal" replace /> : <Dashboard />
+}
 
 function Protected() {
   const { user, loading } = useAuth()
@@ -28,7 +38,10 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route element={<Protected />}>
-          <Route index element={<Dashboard />} />
+          <Route index element={<Home />} />
+          <Route path="portal" element={<PortalHome />} />
+          <Route path="portal/issue" element={<PortalIssue />} />
+          <Route path="portal/activation" element={<Offline base="/portal/activations" portal />} />
           <Route path="customers" element={<Customers />} />
           <Route path="customers/:id" element={<CustomerDetail />} />
           <Route path="resellers" element={<Resellers />} />
