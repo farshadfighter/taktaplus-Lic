@@ -11,6 +11,8 @@
 
 - **سیستم (Owner):** بکاپ رمزنگاری‌شده‌ی خود سرور لایسنس (دیتابیس، مخزن، فایل‌های کلید امضا و کلید اصلی) با عبارت عبور جدا، زمان‌بندی و کپی SFTP؛ ارتقا با بسته‌ی آفلاین امضاشده و برگشت خودکار در صورت خطا.
 
+- **API (Owner):** توکن‌های API برای سامانه‌های دیگر (نقش‌های کارکنان شرکت، فقط‌خواندنی، انقضا، IP مجاز) در «سیستم ← توکن‌های API» و مستند OpenAPI در `/api/v1/openapi.json` و صفحه‌ی «مستند API»؛ مدیریت کاربران و توکن‌ها، ارتقا و عبارت عبور بکاپ با توکن ممکن نیست.
+
 کاربران پورتال با رمز اولیه‌ای که ادمین یا نماینده تعیین می‌کند وارد می‌شوند و در اولین ورود ورود دو مرحله‌ای (TOTP) را فعال می‌کنند.
 
 ## اجزا
@@ -24,6 +26,7 @@
 | `pkg/manifest` | فرمت Manifest امضاشده‌ی پکیج‌ها — مشترک با TaktaPlus |
 | `pkg/release` | بسته‌ی نصب/ارتقای آفلاین امضاشده (`lictool build-release` / `verify-release`) — برای هر دو محصول |
 | `pkg/selfbackup`, `pkg/sysadmin` | بکاپ رمزنگاری‌شده (Argon2id + XChaCha20-Poly1305)، SFTP و پیاده‌سازی مشترک بکاپ و ارتقای خود محصول |
+| `pkg/apitoken`, `pkg/apidoc` | قالب توکن API (`tpk_…`، فقط Hash ذخیره می‌شود) و ساخت مستند OpenAPI — مشترک با TaktaPlus |
 | `internal/releasekeys/keys` | کلیدهای **عمومی** انتشار که داخل باینری قرار می‌گیرند |
 | `deploy/bundle`, `scripts/release` | فایل‌های بسته‌ی نصب و اسکریپت ساخت آن |
 | `web/` | پنل وب (React + Ant Design، راست‌به‌چپ) |
@@ -72,6 +75,10 @@ sudo ./install.sh https://license.example.com    # آدرس عمومی؛ یک Re
 - ساخت بسته: کلید عمومی انتشار را در `internal/releasekeys/keys/` بگذارید و `TPLIC_KEY_PASSPHRASE=... scripts/release/build-bundle.sh 1.3.0 /secure/keys/rel-2026-01.key 1.0.0`.
 
 اسکریپت‌های `deploy/bundle/scripts` بین هر دو محصول یکسان‌اند و فقط `product.sh` فرق دارد.
+
+## API
+
+مستند کامل در `/api/v1/openapi.json`؛ با توکن: `curl -H "Authorization: Bearer tpk_…" https://license.example.com/api/v1/licenses`. پس از تغییر مسیرها در `internal/server/server.go`، `make apidoc` را اجرا کنید.
 
 ## API نصب‌ها
 
