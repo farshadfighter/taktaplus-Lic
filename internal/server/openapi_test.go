@@ -31,6 +31,9 @@ func TestOpenAPICoversRoutes(t *testing.T) {
 		t.Fatalf("run make apidoc: undocumented %v, stale %v", missing, stale)
 	}
 	for _, r := range apiRoutes {
+		if apiTags[r.Tag] == "" {
+			t.Errorf("tag %q of %s has no description in apiTags", r.Tag, r.Key())
+		}
 		if r.Access == apidoc.Session && r.Perm == "" && r.Path != "/me" && !strings.HasPrefix(r.Path, "/portal/") {
 			t.Errorf("%s needs a session but names no permission", r.Key())
 		}
