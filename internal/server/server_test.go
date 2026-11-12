@@ -34,6 +34,19 @@ type harness struct {
 	lic    *licensing.Service
 	ts     *httptest.Server
 	client *http.Client
+	clock  *testClock
+}
+
+// testClock is the server's clock; it moves one TOTP step for every code a
+// test sends, since a code is accepted only once.
+type testClock struct{ skew time.Duration }
+
+func (c *testClock) now() time.Time { return time.Now().Add(c.skew) }
+
+// code returns a fresh TOTP code for secret.
+func (h *harness) code(secret []byte) string {
+	h.clock.skew += 30 * time.Second
+	return auth.TOTPCode(secret, h.clock.now())
 }
 
 func newHarness(t *testing.T) *harness {
@@ -51,7 +64,9 @@ func newHarness(t *testing.T) *harness {
 	ts := httptest.NewServer(New(Deps{Log: slog.New(slog.NewTextHandler(io.Discard, nil)), DB: db, Auth: svc, Licensing: lic, Repo: rp, UI: ui}))
 	t.Cleanup(ts.Close)
 	jar, _ := cookiejar.New(nil)
-	return &harness{t: t, db: db, auth: svc, lic: lic, ts: ts, client: &http.Client{Jar: jar}}
+	clock := &testClock{}
+	svc.SetClock(clock.now)
+	return &harness{t: t, db: db, auth: svc, lic: lic, ts: ts, client: &http.Client{Jar: jar}, clock: clock}
 }
 
 func (h *harness) do(method, path string, body any, csrf bool) (int, map[string]any) {
@@ -142,7 +157,7 @@ func TestLoginWithTOTPSetup(t *testing.T) {
 	if code, _ := h.do("POST", "/api/v1/auth/mfa/enable", map[string]string{"code": "000000"}, true); code != http.StatusUnauthorized {
 		t.Fatalf("wrong code = %d", code)
 	}
-	code, body = h.do("POST", "/api/v1/auth/mfa/enable", map[string]string{"code": auth.TOTPCode(secret, time.Now())}, true)
+	code, body = h.do("POST", "/api/v1/auth/mfa/enable", map[string]string{"code": h.code(secret)}, true)
 	if code != http.StatusOK || body["next"] != "done" {
 		t.Fatalf("mfa enable = %d %v", code, body)
 	}
@@ -168,7 +183,7 @@ func TestLoginWithTOTPSetup(t *testing.T) {
 	if code, _ := h.do("POST", "/api/v1/auth/mfa/setup", nil, true); code != http.StatusConflict {
 		t.Fatalf("re-running setup = %d, want 409", code)
 	}
-	if code, _ := h.do("POST", "/api/v1/auth/mfa", map[string]string{"code": auth.TOTPCode(secret, time.Now())}, true); code != http.StatusOK {
+	if code, _ := h.do("POST", "/api/v1/auth/mfa", map[string]string{"code": h.code(secret)}, true); code != http.StatusOK {
 		t.Fatalf("mfa = %d", code)
 	}
 }
@@ -196,13 +211,13 @@ func TestInstallationEndpointsNeedNoSession(t *testing.T) {
 	}
 }
 
-func TestRateLimiter(t *testing.T) {
-	l := newRateLimiter(2, time.Minute)
-	now := time.Now()
-	if !l.allow("a", now) || !l.allow("a", now) || l.allow("a", now) {
-		t.Fatal("third request in window must be refused")
+func TestLoginRateLimit(t *testing.T) {
+	h := newHarness(t)
+	var code int
+	for i := 0; i < 25; i++ {
+		code, _ = h.do("POST", "/api/v1/auth/login", map[string]string{"email": "nobody@example.com", "password": "wrong password!!"}, true)
 	}
-	if !l.allow("b", now) || !l.allow("a", now.Add(2*time.Minute)) {
-		t.Fatal("other keys and new windows must be allowed")
+	if code != http.StatusTooManyRequests {
+		t.Fatalf("25th login attempt = %d, want 429", code)
 	}
 }

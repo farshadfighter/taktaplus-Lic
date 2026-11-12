@@ -183,6 +183,9 @@ func (s *Service) Login(ctx context.Context, email, password, ip, userAgent stri
 	return token, sess, nil
 }
 
+// SetClock replaces the clock (tests).
+func (s *Service) SetClock(now func() time.Time) { s.now = now }
+
 // Authenticate resolves a session token, enforcing idle and absolute expiry.
 func (s *Service) Authenticate(ctx context.Context, token string) (Session, error) {
 	if token == "" {
@@ -253,10 +256,19 @@ func (s *Service) checkCode(ctx context.Context, userID int64, code string) (use
 	if err != nil {
 		return r, err
 	}
-	if !VerifyTOTP(secret, strings.TrimSpace(code), s.now()) {
+	step, ok := MatchTOTP(secret, strings.TrimSpace(code), s.now())
+	if !ok {
 		if err := s.recordFailure(ctx, userID, r.failed); err != nil {
 			return r, err
 		}
+		return r, ErrInvalidCode
+	}
+	// Each code works once: someone who sees a code cannot reuse it.
+	tag, err := s.db.Exec(ctx, `UPDATE users SET totp_last_step = $2 WHERE id = $1 AND (totp_last_step IS NULL OR totp_last_step < $2)`, userID, step)
+	if err != nil {
+		return r, err
+	}
+	if tag.RowsAffected() == 0 {
 		return r, ErrInvalidCode
 	}
 	return r, nil
@@ -361,10 +373,15 @@ func (s *Service) SetUserActive(ctx context.Context, orgID, userID int64, active
 // Reauthenticate checks the password and current TOTP code of a signed-in
 // user again before a sensitive action. Failures count toward the lockout.
 func (s *Service) Reauthenticate(ctx context.Context, userID int64, password, code string) error {
-	r, err := s.checkCode(ctx, userID, code)
+	r, err := scanUser(s.db.QueryRow(ctx,
+		`SELECT `+userColumns+` FROM users u JOIN organizations o ON o.id = u.org_id WHERE u.id = $1`, userID))
 	if err != nil {
 		return err
 	}
+	if r.lockedUntil != nil && s.now().Before(*r.lockedUntil) {
+		return ErrLocked
+	}
+	// The password first, so a mistyped password does not use up the code.
 	ok, err := CheckPassword(r.hash, password)
 	if err != nil {
 		return err
@@ -375,5 +392,6 @@ func (s *Service) Reauthenticate(ctx context.Context, userID int64, password, co
 		}
 		return ErrInvalidCredentials
 	}
-	return nil
+	_, err = s.checkCode(ctx, userID, code)
+	return err
 }

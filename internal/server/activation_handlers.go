@@ -3,58 +3,9 @@ package server
 import (
 	"errors"
 	"net/http"
-	"sync"
-	"time"
 
 	"github.com/farshadfighter/taktaplus-lic/internal/licensing"
 )
-
-// rateLimiter is a fixed-window per-IP limiter for the public installation
-// endpoints.
-type rateLimiter struct {
-	mu     sync.Mutex
-	limit  int
-	window time.Duration
-	hits   map[string]*windowCount
-}
-
-type windowCount struct {
-	start time.Time
-	n     int
-}
-
-func newRateLimiter(limit int, window time.Duration) *rateLimiter {
-	return &rateLimiter{limit: limit, window: window, hits: map[string]*windowCount{}}
-}
-
-func (l *rateLimiter) allow(key string, now time.Time) bool {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	if len(l.hits) > 10000 { // drop stale entries now and then
-		for k, w := range l.hits {
-			if now.Sub(w.start) > l.window {
-				delete(l.hits, k)
-			}
-		}
-	}
-	w := l.hits[key]
-	if w == nil || now.Sub(w.start) > l.window {
-		l.hits[key] = &windowCount{start: now, n: 1}
-		return true
-	}
-	w.n++
-	return w.n <= l.limit
-}
-
-func (l *rateLimiter) middleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !l.allow(clientIP(r), time.Now()) {
-			writeError(w, http.StatusTooManyRequests, "too many requests")
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
-}
 
 type requestBody struct {
 	Request string `json:"request"`

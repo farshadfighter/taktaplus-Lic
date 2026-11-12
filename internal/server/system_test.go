@@ -10,9 +10,7 @@ import (
 	"net/http/httptest"
 	"testing"
 	"testing/fstest"
-	"time"
 
-	"github.com/farshadfighter/taktaplus-lic/internal/auth"
 	"github.com/farshadfighter/taktaplus-lic/internal/secretbox"
 	"github.com/farshadfighter/taktaplus-lic/internal/settings"
 	"github.com/farshadfighter/taktaplus-lic/pkg/keys"
@@ -37,17 +35,17 @@ func TestSystemEndpoints(t *testing.T) {
 	h.do("POST", "/api/v1/auth/login", map[string]string{"email": "owner@example.com", "password": "correct horse battery"}, true)
 	_, body := h.do("POST", "/api/v1/auth/mfa/setup", nil, true)
 	secret, _ := base32.StdEncoding.WithPadding(base32.NoPadding).DecodeString(body["secret"].(string))
-	h.do("POST", "/api/v1/auth/mfa/enable", map[string]string{"code": auth.TOTPCode(secret, time.Now())}, true)
+	h.do("POST", "/api/v1/auth/mfa/enable", map[string]string{"code": h.code(secret)}, true)
 
 	code, body := h.do("GET", "/api/v1/system", nil, false)
 	if code != http.StatusOK || body["info"].(map[string]any)["product"] != release.ProductLicense {
 		t.Fatalf("overview = %d %v", code, body)
 	}
 	// The passphrase needs the password and code again.
-	if code, _ := h.do("POST", "/api/v1/system/backup/passphrase", map[string]string{"passphrase": "a long backup passphrase", "password": "wrong password!!", "code": auth.TOTPCode(secret, time.Now())}, true); code != http.StatusForbidden {
+	if code, _ := h.do("POST", "/api/v1/system/backup/passphrase", map[string]string{"passphrase": "a long backup passphrase", "password": "wrong password!!", "code": h.code(secret)}, true); code != http.StatusForbidden {
 		t.Fatalf("wrong password = %d", code)
 	}
-	if code, _ := h.do("POST", "/api/v1/system/backup/passphrase", map[string]string{"passphrase": "a long backup passphrase", "password": "correct horse battery", "code": auth.TOTPCode(secret, time.Now())}, true); code != http.StatusNoContent {
+	if code, _ := h.do("POST", "/api/v1/system/backup/passphrase", map[string]string{"passphrase": "a long backup passphrase", "password": "correct horse battery", "code": h.code(secret)}, true); code != http.StatusNoContent {
 		t.Fatalf("passphrase = %d", code)
 	}
 	if code, body := h.do("PUT", "/api/v1/system/backup/settings", map[string]any{"enabled": true, "cron": "0 3 * * *", "keep": 5, "sftp": map[string]any{}}, true); code != http.StatusNoContent {
