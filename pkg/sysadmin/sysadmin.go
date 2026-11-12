@@ -111,6 +111,7 @@ type Service struct {
 	ring     keys.Keyring
 	log      *slog.Logger
 	notify   func(ctx context.Context, channelID int64, to []string, subject, body string) error
+	listen   func(kind string, data map[string]any)
 	mu       sync.Mutex // one backup or staging at a time
 	now      func() time.Time
 }
@@ -121,6 +122,16 @@ func New(db *pgxpool.Pool, st Store, ring keys.Keyring, opt Options, log *slog.L
 		opt.Hostname, _ = os.Hostname()
 	}
 	return &Service{db: db, settings: st, opt: opt, ring: ring, log: log, now: time.Now}
+}
+
+// SetListener receives live events: "backup" when a product backup ends and
+// "upgrade" when an upgrade changes step or state.
+func (s *Service) SetListener(f func(kind string, data map[string]any)) { s.listen = f }
+
+func (s *Service) emit(kind string, data map[string]any) {
+	if s.listen != nil {
+		s.listen(kind, data)
+	}
 }
 
 // SetNotifier sets how failures are reported.
@@ -397,6 +408,7 @@ func (s *Service) run(ctx context.Context, id int64) {
 	if err != nil {
 		s.log.Error("system backup failed", "err", err)
 		_, _ = s.db.Exec(ctx, `UPDATE system_backups SET status = 'failed', error = $2, finished_at = now() WHERE id = $1`, id, err.Error())
+		s.emit("backup", map[string]any{"id": id, "status": "failed"})
 		s.alert(ctx, st, "بکاپ "+s.name()+" ناموفق بود", err.Error())
 		return
 	}
@@ -411,6 +423,7 @@ func (s *Service) run(ctx context.Context, id int64) {
 	_, _ = s.db.Exec(ctx, `UPDATE system_backups SET status = 'ok', file = $2, size = $3, sftp_status = $4, error = $5, finished_at = now() WHERE id = $1`,
 		id, res.File, res.Size, sftpStatus, sftpErr)
 	s.log.Info("system backup done", "file", res.File, "size", res.Size)
+	s.emit("backup", map[string]any{"id": id, "status": "ok"})
 }
 
 func (s *Service) name() string {
@@ -436,15 +449,20 @@ func (s *Service) Recover(ctx context.Context) error {
 	return err
 }
 
-// Scheduler runs scheduled backups until ctx ends.
+// Scheduler runs scheduled backups until ctx ends and follows the
+// updater's progress every few seconds.
 func (s *Service) Scheduler(ctx context.Context) {
 	t := time.NewTicker(time.Minute)
 	defer t.Stop()
+	sync := time.NewTicker(5 * time.Second)
+	defer sync.Stop()
 	last := s.now()
 	for {
 		select {
 		case <-ctx.Done():
 			return
+		case <-sync.C:
+			s.syncUpgrade(ctx)
 		case now := <-t.C:
 			st, err := s.load(ctx)
 			if err == nil && st.Enabled {
@@ -456,7 +474,6 @@ func (s *Service) Scheduler(ctx context.Context) {
 				}
 			}
 			last = now
-			s.syncUpgrade(ctx)
 		}
 	}
 }
@@ -591,11 +608,14 @@ func (s *Service) syncUpgrade(ctx context.Context) {
 			logText = logText[len(logText)-64<<10:]
 		}
 		finished := st.State == "done" || st.State == "failed" || st.State == "rolled_back"
-		_, err = s.db.Exec(ctx, `UPDATE system_upgrades SET status = $2, step = $3, message = $4, log = $5,
-			finished_at = CASE WHEN $6 THEN coalesce(finished_at, now()) ELSE NULL END WHERE id = $1`,
+		tag, err := s.db.Exec(ctx, `UPDATE system_upgrades SET status = $2, step = $3, message = $4, log = $5,
+			finished_at = CASE WHEN $6 THEN coalesce(finished_at, now()) ELSE NULL END
+			WHERE id = $1 AND (status, step, message, log) IS DISTINCT FROM ($2, $3, $4, $5)`,
 			st.ID, st.State, st.Step, st.Message, string(logText), finished)
 		if err != nil {
 			s.log.Warn("upgrade status", "err", err)
+		} else if tag.RowsAffected() > 0 {
+			s.emit("upgrade", map[string]any{"id": st.ID, "status": st.State, "step": st.Step})
 		}
 	}
 }
