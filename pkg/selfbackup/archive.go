@@ -29,6 +29,7 @@ type Options struct {
 	DatabaseURL string
 	PgDump      string   // pg_dump binary, default "pg_dump"
 	PgRestore   string   // pg_restore binary, default "pg_restore"
+	DumpArgs    []string // extra pg_dump arguments, e.g. --schema=x in tests
 	DataDir     string   // "" skips data files
 	Exclude     []string // top-level names under DataDir left out (and kept on restore)
 	// Extra are small named values stored with the backup, such as the
@@ -54,7 +55,8 @@ func Write(ctx context.Context, w io.Writer, o Options) error {
 	defer os.Remove(tmp.Name())
 	defer tmp.Close()
 	var stderr bytes.Buffer
-	cmd := exec.CommandContext(ctx, o.bin(o.PgDump, "pg_dump"), "--format=custom", "--no-owner", "--no-privileges", "--dbname="+o.DatabaseURL)
+	args := append([]string{"--format=custom", "--no-owner", "--no-privileges", "--dbname=" + o.DatabaseURL}, o.DumpArgs...)
+	cmd := exec.CommandContext(ctx, o.bin(o.PgDump, "pg_dump"), args...)
 	cmd.Stdout, cmd.Stderr = tmp, &stderr
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("pg_dump: %v: %s", err, strings.TrimSpace(stderr.String()))
