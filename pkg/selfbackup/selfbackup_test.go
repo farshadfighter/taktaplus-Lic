@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -76,11 +77,21 @@ func TestWriteRestore(t *testing.T) {
 		t.Skip("pg_dump not installed")
 	}
 	psql := func(sql string) string {
+		t.Helper()
 		out, err := exec.Command("psql", "-qAt", "-d", url, "-c", sql).CombinedOutput()
 		if err != nil {
 			t.Fatalf("psql %s: %v %s", sql, err, out)
 		}
 		return strings.TrimSpace(string(out))
+	}
+	// pg_restore must not be newer than the server: a newer client sets
+	// parameters an older server rejects (production images match them).
+	if out, err := exec.Command("pg_restore", "--version").Output(); err == nil {
+		client := regexp.MustCompile(`(\d+)\.`).FindStringSubmatch(string(out))
+		server := psql("SHOW server_version_num")
+		if client != nil && len(server) >= 2 && strings.TrimLeft(server[:len(server)-4], "0") != client[1] {
+			t.Skipf("pg_restore %s does not match the server (%s)", client[1], server)
+		}
 	}
 	// Only this test's schema: other packages' tests use the database too.
 	psql("DROP SCHEMA IF EXISTS selfbackup_test CASCADE; CREATE SCHEMA selfbackup_test; CREATE TABLE selfbackup_test.t (v text); INSERT INTO selfbackup_test.t VALUES ('before')")
