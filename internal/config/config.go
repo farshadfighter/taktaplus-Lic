@@ -23,6 +23,8 @@ type Config struct {
 	DataDir         string         // TPLIC_DATA_DIR: package files, default /var/lib/taktaplus-lic
 	ShutdownTimeout time.Duration  // TPLIC_SHUTDOWN_TIMEOUT, default 15s
 	LogLevel        string         // TPLIC_LOG_LEVEL: debug, info, warn, error
+	PgDump          string         // TPLIC_PG_DUMP and TPLIC_PG_RESTORE: PostgreSQL client tools for self-backups
+	PgRestore       string
 }
 
 // FromEnv reads the configuration from the process environment.
@@ -37,6 +39,8 @@ func FromEnv() (Config, error) {
 		PackageKeyFile:  os.Getenv("TPLIC_PACKAGE_KEY_FILE"),
 		PackageKeyPass:  []byte(os.Getenv("TPLIC_PACKAGE_KEY_PASSPHRASE")),
 		DataDir:         getenv("TPLIC_DATA_DIR", "/var/lib/taktaplus-lic"),
+		PgDump:          getenv("TPLIC_PG_DUMP", "pg_dump"),
+		PgRestore:       getenv("TPLIC_PG_RESTORE", "pg_restore"),
 		ShutdownTimeout: 15 * time.Second,
 		LogLevel:        getenv("TPLIC_LOG_LEVEL", "info"),
 	}

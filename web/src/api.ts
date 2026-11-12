@@ -41,6 +41,7 @@ export const api = {
   get: <T>(p: string) => request<T>('GET', p),
   post: <T>(p: string, b?: unknown) => request<T>('POST', p, b ?? {}),
   put: <T>(p: string, b: unknown) => request<T>('PUT', p, b),
+  del: <T>(p: string) => request<T>('DELETE', p),
 }
 
 // --- types mirroring the server JSON ---
@@ -215,4 +216,25 @@ export type PortalOverview = {
   credits?: Credits
   transactions?: CreditTx[]
   customers?: Org[]
+}
+
+// --- product backup and upgrade ---
+export type SFTPConfig = { host: string; port: number; user: string; password?: string; private_key?: string; dir: string; host_key: string }
+export type SystemBackupSettings = {
+  enabled: boolean; cron: string; keep: number; sftp_enabled: boolean; sftp: SFTPConfig; sftp_keep: number
+  notify_channel_id: number | null; notify_to: string[]
+}
+export type SystemBackupView = SystemBackupSettings & { has_password: boolean; has_private_key: boolean; key_set: boolean; key_set_at: string | null }
+export type SystemRun = {
+  id: number; trigger: 'manual' | 'schedule' | 'pre_upgrade' | 'file'; status: 'running' | 'ok' | 'failed'; started_at: string; finished_at: string | null
+  file: string; size: number; sftp_status: '' | 'ok' | 'failed'; error: string; created_by: string; available: boolean
+}
+export type SystemUpgrade = {
+  id: number; version: string; from_version: string; notes: string
+  status: 'staged' | 'queued' | 'running' | 'done' | 'failed' | 'rolled_back' | 'cancelled'
+  step: string; message: string; log: string; uploaded_by: string; created_at: string; finished_at: string | null
+}
+export type SystemInfo = {
+  version: string; commit: string; build_date: string; can_verify: boolean; updater: boolean; updater_seen: string | null
+  backup_bytes: number; free_bytes: number
 }

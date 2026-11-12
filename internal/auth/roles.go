@@ -32,6 +32,7 @@ const (
 	PermKeysManage         Perm = "keys.manage"
 	PermUsersManage        Perm = "users.manage"
 	PermAuditRead          Perm = "audit.read"
+	PermSystem             Perm = "system.manage" // backups and upgrades of the license server itself
 )
 
 var readOnly = []Perm{PermCustomersRead, PermLicensesRead, PermInstallationsRead}
@@ -40,7 +41,7 @@ var rolePerms = map[Role][]Perm{
 	RoleOwner: {
 		PermCustomersRead, PermCustomersWrite, PermLicensesRead, PermLicensesWrite, PermLicensesRevoke,
 		PermActivationOffline, PermInstallationsRead, PermInstallationsWrite, PermResellersWrite,
-		PermProductsWrite, PermRepoPublish, PermKeysManage, PermUsersManage, PermAuditRead,
+		PermProductsWrite, PermRepoPublish, PermKeysManage, PermUsersManage, PermAuditRead, PermSystem,
 	},
 	RoleAdmin: {
 		PermCustomersRead, PermCustomersWrite, PermLicensesRead, PermLicensesWrite, PermLicensesRevoke,

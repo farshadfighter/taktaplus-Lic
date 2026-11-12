@@ -19,6 +19,7 @@ import (
 	"github.com/farshadfighter/taktaplus-lic/internal/licensing"
 	"github.com/farshadfighter/taktaplus-lic/internal/orgs"
 	"github.com/farshadfighter/taktaplus-lic/internal/repo"
+	"github.com/farshadfighter/taktaplus-lic/pkg/sysadmin"
 )
 
 // Deps are the server's collaborators.
@@ -30,6 +31,7 @@ type Deps struct {
 	Repo         *repo.Service
 	UI           fs.FS
 	CookieSecure bool
+	System       *sysadmin.Service
 }
 
 type srv struct {
@@ -39,11 +41,12 @@ type srv struct {
 	lic          *licensing.Service
 	repo         *repo.Service
 	cookieSecure bool
+	system       *sysadmin.Service
 }
 
 // New returns the root HTTP handler.
 func New(d Deps) http.Handler {
-	s := &srv{log: d.Log, db: d.DB, auth: d.Auth, lic: d.Licensing, repo: d.Repo, cookieSecure: d.CookieSecure}
+	s := &srv{log: d.Log, db: d.DB, auth: d.Auth, lic: d.Licensing, repo: d.Repo, cookieSecure: d.CookieSecure, system: d.System}
 
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID, middleware.Recoverer, securityHeaders)
@@ -89,6 +92,17 @@ func New(d Deps) http.Handler {
 			r.Post("/auth/logout", s.handleLogout)
 			r.With(requireUser).Get("/me", s.handleMe)
 			r.With(requirePerm(auth.PermAuditRead)).Get("/audit", s.handleAuditList)
+			if s.system != nil {
+				sm := requirePerm(auth.PermSystem)
+				r.With(sm).Get("/system", s.systemOverview)
+				r.With(sm).Put("/system/backup/settings", s.saveSystemBackupSettings)
+				r.With(sm).Post("/system/backup/passphrase", s.setSystemBackupPassphrase)
+				r.With(sm).Post("/system/backup/sftp-test", s.testSystemSFTP)
+				r.With(sm).Post("/system/backup/run", s.startSystemBackup)
+				r.With(sm).Get("/system/backup/file", s.downloadSystemBackup)
+				r.With(sm).Post("/system/upgrades", s.uploadUpgrade)
+				r.With(sm).Delete("/system/upgrades/{id}", s.cancelUpgrade)
+			}
 
 			read := requirePerm(auth.PermCustomersRead)
 			r.With(read).Get("/customers", s.listOrgs(orgs.KindCustomer))

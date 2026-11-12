@@ -28,10 +28,14 @@ import (
 	"github.com/farshadfighter/taktaplus-lic/internal/config"
 	"github.com/farshadfighter/taktaplus-lic/internal/licensing"
 	"github.com/farshadfighter/taktaplus-lic/internal/orgs"
+	"github.com/farshadfighter/taktaplus-lic/internal/releasekeys"
 	"github.com/farshadfighter/taktaplus-lic/internal/repo"
 	"github.com/farshadfighter/taktaplus-lic/internal/server"
+	"github.com/farshadfighter/taktaplus-lic/internal/settings"
 	"github.com/farshadfighter/taktaplus-lic/internal/signer"
 	"github.com/farshadfighter/taktaplus-lic/internal/store"
+	"github.com/farshadfighter/taktaplus-lic/pkg/release"
+	"github.com/farshadfighter/taktaplus-lic/pkg/sysadmin"
 	"github.com/farshadfighter/taktaplus-lic/web"
 )
 
@@ -44,10 +48,17 @@ func main() {
 		fmt.Println(buildinfo.String())
 		return
 	}
+	if cmd == "verify-bundle-dir" {
+		if err := verifyBundleDir(os.Args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
 	switch cmd {
-	case "serve", "migrate", "create-admin":
+	case "serve", "migrate", "create-admin", "system-backup", "restore-backup", "stage-upgrade", "upgrade-snapshot", "upgrade-rollback":
 	default:
-		fmt.Fprintln(os.Stderr, "usage: licserver [serve|migrate|create-admin|version]")
+		fmt.Fprintln(os.Stderr, "usage: licserver [serve|migrate|create-admin|system-backup|restore-backup|stage-upgrade|verify-bundle-dir|upgrade-snapshot|upgrade-rollback|version]")
 		os.Exit(2)
 	}
 	if err := run(cmd, os.Args[min(2, len(os.Args)):]); err != nil {
@@ -89,12 +100,27 @@ func run(cmd string, args []string) error {
 		log.Warn("no license signing key configured (TPLIC_LICENSE_KEY_FILE); licenses cannot be issued")
 	}
 	licSvc := licensing.NewService(pool, cfg.MasterKey, issuer, cfg.PublicURL)
+	ring, err := releasekeys.Trusted()
+	if err != nil {
+		return err
+	}
+	sysSvc := sysadmin.New(pool, settings.New(pool, cfg.MasterKey), ring, sysadmin.Options{
+		Product: release.ProductLicense,
+		Build:   sysadmin.Build{Version: buildinfo.Version, Commit: buildinfo.Commit, Date: buildinfo.Date},
+		DataDir: cfg.DataDir, DatabaseURL: cfg.DatabaseURL, MasterKey: os.Getenv("TPLIC_MASTER_KEY"), PgDump: cfg.PgDump,
+	}, log)
 	switch cmd {
 	case "migrate":
 		return nil
 	case "create-admin":
 		return createAdmin(ctx, pool, authSvc, args)
+	case "system-backup", "restore-backup", "stage-upgrade", "upgrade-snapshot", "upgrade-rollback":
+		return systemCommand(ctx, cmd, args, cfg, sysSvc)
 	}
+	if err := sysSvc.Recover(ctx); err != nil {
+		return err
+	}
+	go sysSvc.Scheduler(ctx)
 
 	var pkgKey *signer.Key
 	if cfg.PackageKeyFile != "" {
@@ -112,6 +138,7 @@ func run(cmd string, args []string) error {
 		Addr: cfg.Listen,
 		Handler: server.New(server.Deps{
 			Log: log, DB: pool, Auth: authSvc, Licensing: licSvc, Repo: repoSvc, UI: web.App(), CookieSecure: cfg.CookieSecure,
+			System: sysSvc,
 		}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}

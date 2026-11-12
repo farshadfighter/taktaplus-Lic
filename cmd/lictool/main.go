@@ -19,6 +19,7 @@ import (
 	"github.com/farshadfighter/taktaplus-lic/pkg/keys"
 	"github.com/farshadfighter/taktaplus-lic/pkg/licformat"
 	"github.com/farshadfighter/taktaplus-lic/pkg/manifest"
+	"github.com/farshadfighter/taktaplus-lic/pkg/release"
 )
 
 const passphraseEnv = "TPLIC_KEY_PASSPHRASE"
@@ -35,13 +36,15 @@ var commands = map[string]command{
 	"inspect-request": {"verify and show a .tpreq activation request", cmdInspectRequest},
 	"sign-manifest":   {"sign a package manifest.json", cmdSignManifest},
 	"verify-manifest": {"verify a manifest.json against its signature", cmdVerifyManifest},
+	"build-release":   {"build and sign an offline install/upgrade bundle from a directory", cmdBuildRelease},
+	"verify-release":  {"verify a bundle's signature and file hashes", cmdVerifyRelease},
 	"version":         {"print the version", func([]string) error { fmt.Println(buildinfo.String()); return nil }},
 }
 
 func usage() {
 	fmt.Fprintln(os.Stderr, "usage: lictool <command> [flags]\n\ncommands:")
 	w := tabwriter.NewWriter(os.Stderr, 0, 0, 2, ' ', 0)
-	for _, name := range []string{"keygen", "sign-license", "verify-license", "inspect-request", "sign-manifest", "verify-manifest", "version"} {
+	for _, name := range []string{"keygen", "sign-license", "verify-license", "inspect-request", "sign-manifest", "verify-manifest", "build-release", "verify-release", "version"} {
 		fmt.Fprintf(w, "  %s\t%s\n", name, commands[name].summary)
 	}
 	w.Flush()
@@ -355,4 +358,93 @@ func cmdVerifyManifest(args []string) error {
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", p.Platform, p.Type, p.Version, p.File)
 	}
 	return w.Flush()
+}
+
+func cmdBuildRelease(args []string) error {
+	fs := flag.NewFlagSet("build-release", flag.ContinueOnError)
+	keyPath := fs.String("key", "", "encrypted release signing key (required)")
+	dir := fs.String("dir", "", "directory with the bundle content (required)")
+	product := fs.String("product", release.ProductApp, "taktaplus or taktaplus-lic")
+	version := fs.String("version", "", "release version, e.g. 1.2.0 (required)")
+	minFrom := fs.String("min-from", "", "oldest installed version this bundle upgrades")
+	notes := fs.String("notes", "", "release notes")
+	images := fs.String("images", "", "comma-separated image references saved under images/")
+	out := fs.String("out", "", "bundle file (default <product>-<version>.tar.gz)")
+	passFile := fs.String("passphrase-file", "", "file containing the passphrase")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *keyPath == "" || *dir == "" || *version == "" {
+		return errors.New("--key, --dir and --version are required")
+	}
+	pass, err := readPassphrase(*passFile)
+	if err != nil {
+		return err
+	}
+	k, err := signer.Load(*keyPath, pass)
+	if err != nil {
+		return err
+	}
+	if *out == "" {
+		*out = *product + "-" + *version + ".tar.gz"
+	}
+	f, err := os.Create(*out)
+	if err != nil {
+		return err
+	}
+	var imgs []string
+	for _, i := range strings.Split(*images, ",") {
+		if i = strings.TrimSpace(i); i != "" {
+			imgs = append(imgs, i)
+		}
+	}
+	m, err := release.Build(f, *dir, release.Manifest{Product: *product, Version: *version, MinFrom: *minFrom, Notes: *notes,
+		Created: time.Now().UTC(), Images: imgs}, k.ID, k.Private)
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		os.Remove(*out)
+		return err
+	}
+	fmt.Printf("%s: %s %s, %d files, signed with %s\n", *out, m.Product, m.Version, len(m.Files), k.ID)
+	return nil
+}
+
+func cmdVerifyRelease(args []string) error {
+	fs := flag.NewFlagSet("verify-release", flag.ContinueOnError)
+	pubPath := fs.String("pub", "", "trusted public keys file (required)")
+	extract := fs.String("extract", "", "also extract into this directory")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *pubPath == "" || fs.NArg() != 1 {
+		return errors.New("usage: lictool verify-release --pub keys.pub [--extract dir] bundle.tar.gz")
+	}
+	pubs, err := os.ReadFile(*pubPath)
+	if err != nil {
+		return err
+	}
+	ring, err := keys.ParseKeyring(string(pubs))
+	if err != nil {
+		return err
+	}
+	f, err := os.Open(fs.Arg(0))
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	m, err := release.Open(f, ring, *extract, nil)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("valid: %s %s (upgrades from %s), %d files\n", m.Product, m.Version, orAny(m.MinFrom), len(m.Files))
+	return nil
+}
+
+func orAny(s string) string {
+	if s == "" {
+		return "any version"
+	}
+	return s
 }

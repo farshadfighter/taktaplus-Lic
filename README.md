@@ -9,6 +9,8 @@
 - **پورتال مشتری:** مشاهده‌ی لایسنس‌ها، سریال‌ها، مهلت و نصب متصل؛ فعال‌سازی آفلاین (بارگذاری `.tpreq`) و دانلود فایل لایسنس.
 - **پورتال نماینده:** مدیریت مشتریان خود و کاربران پورتال آن‌ها؛ صدور، افزودن و تمدید لایسنس از محل اعتبار سریال‌سال و کاربرسال 2FA (کسر اعتبار و تغییر لایسنس در یک تراکنش)؛ فعال‌سازی آفلاین برای مشتریان خود.
 
+- **سیستم (Owner):** بکاپ رمزنگاری‌شده‌ی خود سرور لایسنس (دیتابیس، مخزن، فایل‌های کلید امضا و کلید اصلی) با عبارت عبور جدا، زمان‌بندی و کپی SFTP؛ ارتقا با بسته‌ی آفلاین امضاشده و برگشت خودکار در صورت خطا.
+
 کاربران پورتال با رمز اولیه‌ای که ادمین یا نماینده تعیین می‌کند وارد می‌شوند و در اولین ورود ورود دو مرحله‌ای (TOTP) را فعال می‌کنند.
 
 ## اجزا
@@ -20,6 +22,10 @@
 | `pkg/keys` | فرمت کلید عمومی و Keyring |
 | `pkg/licformat` | فرمت فایل لایسنس (`.tplic`) و درخواست فعال‌سازی (`.tpreq`) — مشترک با TaktaPlus |
 | `pkg/manifest` | فرمت Manifest امضاشده‌ی پکیج‌ها — مشترک با TaktaPlus |
+| `pkg/release` | بسته‌ی نصب/ارتقای آفلاین امضاشده (`lictool build-release` / `verify-release`) — برای هر دو محصول |
+| `pkg/selfbackup`, `pkg/sysadmin` | بکاپ رمزنگاری‌شده (Argon2id + XChaCha20-Poly1305)، SFTP و پیاده‌سازی مشترک بکاپ و ارتقای خود محصول |
+| `internal/releasekeys/keys` | کلیدهای **عمومی** انتشار که داخل باینری قرار می‌گیرند |
+| `deploy/bundle`, `scripts/release` | فایل‌های بسته‌ی نصب و اسکریپت ساخت آن |
 | `web/` | پنل وب (React + Ant Design، راست‌به‌چپ) |
 
 ## توسعه
@@ -49,6 +55,23 @@ make test lint
 | `TPLIC_PACKAGE_KEY_FILE` / `TPLIC_PACKAGE_KEY_PASSPHRASE` | کلید امضای Manifest مخزن پکیج (`lictool keygen -kid pkg-...`)؛ جدا از کلید لایسنس |
 | `TPLIC_DATA_DIR` | محل فایل‌های پکیج (`repo/`)، پیش‌فرض `/var/lib/taktaplus-lic` |
 | `TPLIC_COOKIE_SECURE` | فقط برای توسعه‌ی محلی روی HTTP مقدار `false` |
+| `TPLIC_PG_DUMP` / `TPLIC_PG_RESTORE` | ابزار PostgreSQL برای بکاپ خود سرور، پیش‌فرض `pg_dump` و `pg_restore` (در ایمیج نصب است) |
+
+## نصب و ارتقا (بسته‌ی آفلاین)
+
+```sh
+tar xzf taktaplus-lic-1.2.0.tar.gz -C /tmp/lic && cd /tmp/lic
+sudo ./install.sh https://license.example.com    # آدرس عمومی؛ یک Reverse Proxy با TLS جلوی پورت 8080 قرار دهید
+```
+
+سپس کلیدهای امضای رمزنگاری‌شده را در `/opt/taktaplus-lic/data/keys/` بگذارید، مسیر (`/var/lib/taktaplus-lic/keys/<kid>.key`) و عبارت عبورشان را در `/opt/taktaplus-lic/.env` وارد و `docker compose up -d` کنید؛ اولین Owner: `docker compose exec licserver licserver create-admin -email you@example.com`.
+
+- **ارتقا:** از پنل («سیستم ← بکاپ و ارتقای سیستم») یا `sudo /opt/taktaplus-lic/scripts/upgrade.sh taktaplus-lic-1.3.0.tar.gz`
+- **بکاپ دستی:** `sudo /opt/taktaplus-lic/scripts/backup.sh`؛ **بازیابی:** `sudo /opt/taktaplus-lic/scripts/restore.sh FILE.tpbak`
+- عبارت عبور کلیدهای امضا در بکاپ نیست؛ پس از بازیابی روی سرور تازه آن‌ها را دوباره در `.env` وارد کنید.
+- ساخت بسته: کلید عمومی انتشار را در `internal/releasekeys/keys/` بگذارید و `TPLIC_KEY_PASSPHRASE=... scripts/release/build-bundle.sh 1.3.0 /secure/keys/rel-2026-01.key 1.0.0`.
+
+اسکریپت‌های `deploy/bundle/scripts` بین هر دو محصول یکسان‌اند و فقط `product.sh` فرق دارد.
 
 ## API نصب‌ها
 
@@ -67,6 +90,8 @@ lictool keygen --kid lic-2026-01 --out /secure/keys
 lictool sign-license --key /secure/keys/lic-2026-01.key --in license.json --request install.tpreq --out license.tplic
 lictool verify-license --pub /secure/keys/lic-2026-01.pub --in license.tplic
 lictool sign-manifest --key /secure/keys/pkg-2026-01.key --in manifest.json --out manifest.sig
+lictool build-release --key /secure/keys/rel-2026-01.key --dir build/ --product taktaplus --version 1.3.0 --out taktaplus-1.3.0.tar.gz
+lictool verify-release --pub /secure/keys/rel-2026-01.pub taktaplus-1.3.0.tar.gz
 ```
 
 فایل `.pub` (کلید عمومی) را می‌توان در برنامه‌ی TaktaPlus قرار داد.
