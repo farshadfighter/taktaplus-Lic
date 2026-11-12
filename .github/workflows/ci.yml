@@ -28,10 +28,6 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - name: PostgreSQL 16 client tools (backup tests restore into the 16 server)
-        run: |
-          sudo apt-get install -y --no-install-recommends postgresql-client-16
-          echo /usr/lib/postgresql/16/bin >> "$GITHUB_PATH"
       - name: gofmt
         run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
       - run: go vet ./...
