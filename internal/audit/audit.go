@@ -16,6 +16,7 @@ const (
 	SourceCustomer = "customer"
 	SourceReseller = "reseller"
 	SourceAPI      = "api"
+	SourceToken    = "token" // vendor staff through an API token
 	SourceSystem   = "system"
 )
 

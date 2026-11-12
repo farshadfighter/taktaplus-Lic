@@ -63,6 +63,7 @@ func New(d Deps) http.Handler {
 	})
 
 	r.Route("/api/v1", func(r chi.Router) {
+		r.Get("/openapi.json", s.openAPI)
 		r.Get("/version", func(w http.ResponseWriter, _ *http.Request) {
 			writeJSON(w, http.StatusOK, map[string]string{
 				"version": buildinfo.Version, "commit": buildinfo.Commit, "date": buildinfo.Date,
@@ -116,9 +117,14 @@ func New(d Deps) http.Handler {
 			r.With(read).Get("/resellers/credits", s.allResellerCredits)
 			r.With(read).Get("/resellers/{id}/credits", s.resellerCredits)
 			r.With(requirePerm(auth.PermResellersWrite)).Post("/resellers/{id}/credits", s.addResellerCredits)
-			r.With(requireUser).Get("/orgs/{id}/users", s.adminOrgUsers(s.listOrgUsers))
-			r.With(requireUser).Post("/orgs/{id}/users", s.adminOrgUsers(s.createOrgUser))
-			r.With(requireUser).Put("/orgs/{id}/users/{uid}", s.adminOrgUsers(s.setOrgUserActive))
+			// User and token management stays in the panel.
+			r.With(panelOnly).Get("/orgs/{id}/users", s.adminOrgUsers(s.listOrgUsers))
+			r.With(panelOnly).Post("/orgs/{id}/users", s.adminOrgUsers(s.createOrgUser))
+			r.With(panelOnly).Put("/orgs/{id}/users/{uid}", s.adminOrgUsers(s.setOrgUserActive))
+			users := func(h http.Handler) http.Handler { return panelOnly(requirePerm(auth.PermUsersManage)(h)) }
+			r.With(users).Get("/tokens", s.listTokens)
+			r.With(users).Post("/tokens", s.createToken)
+			r.With(users).Delete("/tokens/{id}", s.revokeToken)
 
 			// Customer and reseller portals.
 			r.Get("/portal/overview", s.portal(false, s.portalOverview))

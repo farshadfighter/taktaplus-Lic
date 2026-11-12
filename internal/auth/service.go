@@ -55,6 +55,7 @@ type Session struct {
 	User      User
 	MFAPassed bool
 	ExpiresAt time.Time
+	Token     *TokenSession // set when the request carries an API token
 }
 
 // Service implements authentication against PostgreSQL.
