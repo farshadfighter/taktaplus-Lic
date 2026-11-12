@@ -7,9 +7,6 @@ import (
 	"net/http"
 	"strconv"
 	"testing"
-	"time"
-
-	"github.com/farshadfighter/taktaplus-lic/internal/auth"
 )
 
 // bearer calls the API with a token only: no cookie, no CSRF header.
@@ -38,11 +35,11 @@ func TestAPITokens(t *testing.T) {
 	h.do("POST", "/api/v1/auth/login", map[string]string{"email": "owner@example.com", "password": "correct horse battery"}, true)
 	_, body := h.do("POST", "/api/v1/auth/mfa/setup", nil, true)
 	secret, _ := base32.StdEncoding.WithPadding(base32.NoPadding).DecodeString(body["secret"].(string))
-	h.do("POST", "/api/v1/auth/mfa/enable", map[string]string{"code": auth.TOTPCode(secret, time.Now())}, true)
+	h.do("POST", "/api/v1/auth/mfa/enable", map[string]string{"code": h.code(secret)}, true)
 
 	newToken := func(in map[string]any) string {
 		t.Helper()
-		in["password"], in["code"] = "correct horse battery", auth.TOTPCode(secret, time.Now())
+		in["password"], in["code"] = "correct horse battery", h.code(secret)
 		code, body := h.do("POST", "/api/v1/tokens", in, true)
 		if code != http.StatusCreated {
 			t.Fatalf("create token = %d %v", code, body)
@@ -52,7 +49,7 @@ func TestAPITokens(t *testing.T) {
 	if code, _ := h.do("POST", "/api/v1/tokens", map[string]any{"name": "x", "role": "viewer"}, true); code != http.StatusForbidden {
 		t.Fatalf("create without reauth = %d", code)
 	}
-	if code, _ := h.do("POST", "/api/v1/tokens", map[string]any{"name": "x", "role": "customer", "password": "correct horse battery", "code": auth.TOTPCode(secret, time.Now())}, true); code != http.StatusBadRequest {
+	if code, _ := h.do("POST", "/api/v1/tokens", map[string]any{"name": "x", "role": "customer", "password": "correct horse battery", "code": h.code(secret)}, true); code != http.StatusBadRequest {
 		t.Fatalf("portal role token = %d", code)
 	}
 	crm := newToken(map[string]any{"name": "CRM", "role": "admin", "days": 90})

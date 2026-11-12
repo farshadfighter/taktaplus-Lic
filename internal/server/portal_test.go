@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/farshadfighter/taktaplus-lic/internal/auth"
 	"github.com/farshadfighter/taktaplus-lic/pkg/licformat"
 )
 
@@ -27,7 +26,7 @@ func (h *harness) as(email, password string) *harness {
 	}
 	_, body := o.do("POST", "/api/v1/auth/mfa/setup", nil, true)
 	secret, _ := base32.StdEncoding.WithPadding(base32.NoPadding).DecodeString(body["secret"].(string))
-	if code, _ := o.do("POST", "/api/v1/auth/mfa/enable", map[string]string{"code": auth.TOTPCode(secret, time.Now())}, true); code != http.StatusOK {
+	if code, _ := o.do("POST", "/api/v1/auth/mfa/enable", map[string]string{"code": o.code(secret)}, true); code != http.StatusOK {
 		h.t.Fatal("mfa failed")
 	}
 	return &o

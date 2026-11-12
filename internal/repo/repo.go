@@ -376,7 +376,7 @@ func (s *Service) Manifests(ctx context.Context) ([]ManifestInfo, error) {
 // Open returns a package file for download. Only files listed in the current
 // manifest are served to installations.
 func (s *Service) Open(ctx context.Context, sha string, published bool) (*os.File, *Package, error) {
-	if len(sha) != 64 {
+	if b, err := hex.DecodeString(sha); err != nil || len(b) != 32 {
 		return nil, nil, ErrNotFound
 	}
 	p, err := scanPkg(s.db.QueryRow(ctx, `SELECT `+pkgCols+` FROM packages p LEFT JOIN users u ON u.id = p.uploaded_by WHERE p.sha256 = $1`, sha))

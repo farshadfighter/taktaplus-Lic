@@ -19,6 +19,7 @@ import (
 	"github.com/farshadfighter/taktaplus-lic/internal/licensing"
 	"github.com/farshadfighter/taktaplus-lic/internal/orgs"
 	"github.com/farshadfighter/taktaplus-lic/internal/repo"
+	"github.com/farshadfighter/taktaplus-lic/pkg/ratelimit"
 	"github.com/farshadfighter/taktaplus-lic/pkg/sysadmin"
 )
 
@@ -79,17 +80,20 @@ func New(d Deps) http.Handler {
 			r.With(requirePerm(auth.PermLicensesRead)).Get("/packages/bundle", s.downloadBundle)
 		})
 		r.Group(func(r chi.Router) {
-			r.Use(newRateLimiter(600, time.Minute).middleware)
+			r.Use(ratelimit.New(600, time.Minute).Middleware)
 			r.Get("/repo/files/{sha}", s.repoFile)
 		})
 
 		// Browser endpoints: cookie session + CSRF header.
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.Timeout(60*time.Second), csrfGuard, s.loadSession)
-			r.Post("/auth/login", s.handleLogin)
-			r.Post("/auth/mfa", s.handleMFA)
-			r.Post("/auth/mfa/setup", s.handleMFASetup)
-			r.Post("/auth/mfa/enable", s.handleMFAEnable)
+			// Password and code guessing: 20 attempts per address and minute
+			// on top of the per-account lockout.
+			authLimit := ratelimit.New(20, time.Minute).Middleware
+			r.With(authLimit).Post("/auth/login", s.handleLogin)
+			r.With(authLimit).Post("/auth/mfa", s.handleMFA)
+			r.With(authLimit).Post("/auth/mfa/setup", s.handleMFASetup)
+			r.With(authLimit).Post("/auth/mfa/enable", s.handleMFAEnable)
 			r.Post("/auth/logout", s.handleLogout)
 			r.With(requireUser).Get("/me", s.handleMe)
 			r.With(requirePerm(auth.PermAuditRead)).Get("/audit", s.handleAuditList)
@@ -169,7 +173,7 @@ func New(d Deps) http.Handler {
 		// Installation endpoints: no cookies; every request is signed by the
 		// installation key, so CSRF does not apply.
 		r.Group(func(r chi.Router) {
-			r.Use(middleware.Timeout(60*time.Second), newRateLimiter(30, time.Minute).middleware)
+			r.Use(middleware.Timeout(60*time.Second), ratelimit.New(30, time.Minute).Middleware)
 			r.Post("/activate", s.handleActivate)
 			r.Post("/heartbeat", s.handleHeartbeat)
 			r.Get("/repo/manifest", s.repoManifest(false))

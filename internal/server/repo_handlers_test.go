@@ -14,7 +14,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/farshadfighter/taktaplus-lic/internal/auth"
 	"github.com/farshadfighter/taktaplus-lic/internal/licensing"
 	"github.com/farshadfighter/taktaplus-lic/internal/orgs"
 	"github.com/farshadfighter/taktaplus-lic/pkg/licformat"
@@ -28,7 +27,7 @@ func (h *harness) signIn() {
 	h.do("POST", "/api/v1/auth/login", map[string]string{"email": "owner@example.com", "password": "correct horse battery"}, true)
 	_, body := h.do("POST", "/api/v1/auth/mfa/setup", nil, true)
 	secret, _ := base32.StdEncoding.WithPadding(base32.NoPadding).DecodeString(body["secret"].(string))
-	if code, _ := h.do("POST", "/api/v1/auth/mfa/enable", map[string]string{"code": auth.TOTPCode(secret, time.Now())}, true); code != http.StatusOK {
+	if code, _ := h.do("POST", "/api/v1/auth/mfa/enable", map[string]string{"code": h.code(secret)}, true); code != http.StatusOK {
 		h.t.Fatal("sign in failed")
 	}
 }
