@@ -6,7 +6,7 @@ import { brand } from './theme'
 
 const { Sider, Header, Content } = Layout
 
-const roleNames: Record<string, string> = {
+export const roleNames: Record<string, string> = {
   owner: 'مالک', admin: 'مدیر', support: 'پشتیبانی', publisher: 'انتشار پکیج', viewer: 'مشاهده‌گر',
   customer: 'پورتال مشتری', reseller: 'پورتال نماینده',
 }
@@ -40,7 +40,9 @@ function NavMenu({ onNavigate }: { onNavigate?: () => void }) {
     ...(can(user, 'audit.read') || can(user, 'system.manage') ? [{ type: 'group' as const, label: 'سیستم', children: [
       ...(can(user, 'audit.read') ? [link('/audit', 'لاگ ممیزی')] : []),
       ...(can(user, 'system.manage') ? [link('/system', 'بکاپ و ارتقای سیستم')] : []),
-    ] }] : []),
+      ...(can(user, 'users.manage') ? [link('/tokens', 'توکن‌های API')] : []),
+      link('/api-docs', 'مستند API'),
+    ] }] : [{ type: 'group' as const, label: 'سیستم', children: [link('/api-docs', 'مستند API')] }]),
   ]
   return <Menu mode="inline" selectedKeys={[key === '/licenses' && pathname === '/licenses/new' ? '/licenses' : key]} items={items} style={{ borderInlineEnd: 0 }} />
 }

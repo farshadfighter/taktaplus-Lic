@@ -47,7 +47,7 @@ func portalSource(r auth.Role) string {
 func (s *srv) audit(r *http.Request, sess auth.Session, action, objType, objID string, details map[string]any) {
 	id := sess.User.ID
 	err := audit.Log(r.Context(), s.db, audit.Entry{
-		Source: portalSource(sess.User.Role), ActorID: &id, Actor: sess.User.Email, IP: clientIP(r),
+		Source: auditSource(sess), ActorID: &id, Actor: sess.User.Email, IP: clientIP(r),
 		Action: action, ObjectType: objType, ObjectID: objID, Details: details,
 	})
 	if err != nil {
@@ -169,4 +169,11 @@ func (s *srv) handleAuditList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"entries": entries})
+}
+
+func auditSource(sess auth.Session) string {
+	if sess.Token != nil {
+		return audit.SourceToken
+	}
+	return portalSource(sess.User.Role)
 }

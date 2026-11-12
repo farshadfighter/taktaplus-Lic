@@ -37,3 +37,11 @@ docker:
 
 clean:
 	rm -rf bin web/dist/app
+
+# Regenerate the OpenAPI route table after changing internal/server/server.go
+# (TestOpenAPICoversRoutes fails until it matches the router).
+apidoc:
+	python3 scripts/dev/apidoc_routes.py internal/server/server.go internal/server server internal/server/apidoc_routes.go
+	sed -i 's|import "github.com/farshadfighter/taktaplus-lic/pkg/apidoc"|import (\n\t"github.com/farshadfighter/taktaplus-lic/internal/auth"\n\t"github.com/farshadfighter/taktaplus-lic/pkg/apidoc"\n)|' internal/server/apidoc_routes.go
+	gofmt -w internal/server/apidoc_routes.go
+.PHONY: apidoc

@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/farshadfighter/taktaplus-lic/internal/auth"
+	"github.com/farshadfighter/taktaplus-lic/pkg/apitoken"
 )
 
 const (
@@ -68,8 +69,25 @@ func internalError(log *slog.Logger, w http.ResponseWriter, r *http.Request, err
 	writeError(w, http.StatusInternalServerError, "internal error")
 }
 
+// errPanelOnly answers token requests for actions kept in the panel.
+const errPanelOnly = "this action is only available in the panel, with your password and code"
+
+// bearerOnly reports whether a request authenticates with an API token and
+// carries no session cookie, so a browser cannot be tricked into it.
+func bearerOnly(r *http.Request) bool {
+	if apitoken.FromHeader(r.Header.Get("Authorization")) == "" {
+		return false
+	}
+	_, err := r.Cookie(sessionCookie)
+	return err != nil
+}
+
 func csrfGuard(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if bearerOnly(r) {
+			next.ServeHTTP(w, r)
+			return
+		}
 		switch r.Method {
 		case http.MethodGet, http.MethodHead, http.MethodOptions:
 		default:
@@ -84,6 +102,23 @@ func csrfGuard(next http.Handler) http.Handler {
 
 func (s *srv) loadSession(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if bearerOnly(r) {
+			sess, err := s.auth.AuthenticateToken(r.Context(), apitoken.FromHeader(r.Header.Get("Authorization")), clientIP(r))
+			switch {
+			case errors.Is(err, apitoken.ErrInvalid):
+				writeError(w, http.StatusUnauthorized, "invalid API token")
+				return
+			case err != nil:
+				internalError(s.log, w, r, err)
+				return
+			}
+			if sess.Token.ReadOnly && !apitoken.ReadOnlyMethod(r.Method) {
+				writeError(w, http.StatusForbidden, "this API token is read-only")
+				return
+			}
+			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), sessionKey, sess)))
+			return
+		}
 		c, err := r.Cookie(sessionCookie)
 		if err == nil && c.Value != "" {
 			sess, err := s.auth.Authenticate(r.Context(), c.Value)
@@ -97,6 +132,17 @@ func (s *srv) loadSession(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// panelOnly refuses API tokens, for managing users and tokens.
+func panelOnly(next http.Handler) http.Handler {
+	return requireUser(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if sess, _ := sessionFrom(r.Context()); sess.Token != nil {
+			writeError(w, http.StatusForbidden, errPanelOnly)
+			return
+		}
+		next.ServeHTTP(w, r)
+	}))
 }
 
 // requireUser admits fully signed-in users (password and MFA).

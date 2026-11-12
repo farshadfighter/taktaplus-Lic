@@ -15,6 +15,8 @@ import Installations from './pages/Installations'
 import Audit from './pages/Audit'
 import Packages from './pages/Packages'
 import SystemPage from './pages/System'
+import Tokens from './pages/Tokens'
+import APIDocsPage from './pages/APIDocsPage'
 import PortalHome from './pages/PortalHome'
 import PortalIssue from './pages/PortalIssue'
 
@@ -54,6 +56,8 @@ export default function App() {
           <Route path="audit" element={<Audit />} />
           <Route path="packages" element={<Packages />} />
           <Route path="system" element={<SystemPage />} />
+          <Route path="tokens" element={<Tokens />} />
+          <Route path="api-docs" element={<APIDocsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>
