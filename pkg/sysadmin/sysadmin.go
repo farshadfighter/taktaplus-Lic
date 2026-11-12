@@ -99,6 +99,7 @@ type Options struct {
 	DatabaseURL string
 	MasterKey   string // the product's master key, stored inside backups
 	PgDump      string
+	DumpArgs    []string // extra pg_dump arguments (tests limit the dump to a schema)
 	Hostname    string
 }
 
@@ -381,7 +382,7 @@ func (s *Service) run(ctx context.Context, id int64) {
 		if err == nil {
 			job := selfbackup.Job{
 				Key: key,
-				Options: selfbackup.Options{DatabaseURL: s.opt.DatabaseURL, PgDump: s.opt.PgDump, DataDir: s.opt.DataDir,
+				Options: selfbackup.Options{DatabaseURL: s.opt.DatabaseURL, PgDump: s.opt.PgDump, DumpArgs: s.opt.DumpArgs, DataDir: s.opt.DataDir,
 					Exclude: Excluded, Extra: map[string][]byte{"master.key": []byte(s.opt.MasterKey)}},
 				Header: selfbackup.Header{Product: s.opt.Product, Version: s.opt.Build.Version, Hostname: s.opt.Hostname},
 				Dir:    s.backupDir(), Prefix: s.prefix(), Keep: st.Keep,

@@ -82,13 +82,14 @@ func TestWriteRestore(t *testing.T) {
 		}
 		return strings.TrimSpace(string(out))
 	}
-	psql("DROP TABLE IF EXISTS selfbackup_t; CREATE TABLE selfbackup_t (v text); INSERT INTO selfbackup_t VALUES ('before')")
+	// Only this test's schema: other packages' tests use the database too.
+	psql("DROP SCHEMA IF EXISTS selfbackup_test CASCADE; CREATE SCHEMA selfbackup_test; CREATE TABLE selfbackup_test.t (v text); INSERT INTO selfbackup_test.t VALUES ('before')")
 	data := t.TempDir()
 	_ = os.MkdirAll(filepath.Join(data, "backups", "1"), 0o700)
 	_ = os.WriteFile(filepath.Join(data, "backups", "1", "cfg.enc"), []byte("CONFIG"), 0o600)
 	_ = os.MkdirAll(filepath.Join(data, "system-backups"), 0o700)
 	_ = os.WriteFile(filepath.Join(data, "system-backups", "old.tpbak"), []byte("x"), 0o600)
-	o := Options{DatabaseURL: url, DataDir: data, Exclude: []string{"system-backups"}, Extra: map[string][]byte{"master.key": []byte("MK")}}
+	o := Options{DatabaseURL: url, DumpArgs: []string{"--schema=selfbackup_test"}, DataDir: data, Exclude: []string{"system-backups"}, Extra: map[string][]byte{"master.key": []byte("MK")}}
 	key, _ := NewKey("correct horse battery")
 	var tarBuf bytes.Buffer
 	if err := Write(context.Background(), &tarBuf, o); err != nil {
@@ -97,7 +98,7 @@ func TestWriteRestore(t *testing.T) {
 	file := encrypt(t, key, tarBuf.Bytes())
 
 	// Change everything, then restore.
-	psql("UPDATE selfbackup_t SET v = 'after'")
+	psql("UPDATE selfbackup_test.t SET v = 'after'")
 	_ = os.WriteFile(filepath.Join(data, "backups", "1", "cfg.enc"), []byte("CHANGED"), 0o600)
 	_ = os.WriteFile(filepath.Join(data, "new.txt"), []byte("new"), 0o600)
 	_, r, err := Decrypt(bytes.NewReader(file), "correct horse battery")
@@ -111,7 +112,7 @@ func TestWriteRestore(t *testing.T) {
 	if string(extra["master.key"]) != "MK" {
 		t.Fatalf("extra = %q", extra)
 	}
-	if v := psql("SELECT v FROM selfbackup_t"); v != "before" {
+	if v := psql("SELECT v FROM selfbackup_test.t"); v != "before" {
 		t.Fatalf("db = %q", v)
 	}
 	if b, _ := os.ReadFile(filepath.Join(data, "backups", "1", "cfg.enc")); string(b) != "CONFIG" {
@@ -123,5 +124,5 @@ func TestWriteRestore(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(data, "system-backups", "old.tpbak")); err != nil {
 		t.Fatal("restore removed an excluded directory")
 	}
-	psql("DROP TABLE selfbackup_t")
+	psql("DROP SCHEMA selfbackup_test CASCADE")
 }

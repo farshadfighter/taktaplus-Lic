@@ -32,7 +32,8 @@ func newService(t *testing.T, ring keys.Keyring) (*Service, string) {
 	dir := t.TempDir()
 	_ = os.MkdirAll(filepath.Join(dir, "backups"), 0o700)
 	_ = os.WriteFile(filepath.Join(dir, "installation.key"), []byte("ID"), 0o600)
-	svc := New(db, settings.New(db, box), ring, Options{Product: release.ProductApp, Build: Build{Version: "1.0.0"}, DataDir: dir, DatabaseURL: os.Getenv("TPLIC_TEST_DATABASE_URL"), MasterKey: "MK"},
+	svc := New(db, settings.New(db, box), ring, Options{Product: release.ProductApp, Build: Build{Version: "1.0.0"}, DataDir: dir, DatabaseURL: os.Getenv("TPLIC_TEST_DATABASE_URL"), MasterKey: "MK",
+		DumpArgs: []string{"--schema=" + db.Config().ConnConfig.RuntimeParams["search_path"]}},
 		slog.New(slog.DiscardHandler))
 	return svc, dir
 }
